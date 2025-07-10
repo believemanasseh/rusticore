@@ -11,4 +11,5 @@ panic = "abort"
 [dependencies]
 log = "0.4"
 log4rs = "1.3.0"
+http = "1.3.1"
 
