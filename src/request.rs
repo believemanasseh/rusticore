@@ -88,7 +88,7 @@ impl Request {
         let mut user_agent: Option<&str> = None;
         let mut accept: Option<&str> = None;
 
-        let valid_http_methods = vec![
+        let valid_http_methods: [&str; 8] = [
             "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
         ];
 
