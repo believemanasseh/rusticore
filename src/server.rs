@@ -101,7 +101,7 @@ impl Server {
                 headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
             };
 
-            let response_str = self.construct_response(&response);
+            let response_str = response.construct_response_str(&response);
             stream.write_all(response_str.as_bytes()).unwrap()
         }
     }
@@ -122,37 +122,5 @@ impl Server {
     /// A string slice representing the target for logging.
     fn get_target(&self) -> &str {
         if self.debug { "app::core" } else { "app::none" }
-    }
-
-    /// Constructs the HTTP response string from the provided `Response` object.
-    ///
-    /// # Arguments
-    /// * `response` - A reference to a `Response` object containing the HTTP response data.
-    ///
-    /// # Returns
-    /// A `String` representing the complete HTTP response formatted as a string.
-    fn construct_response(&self, response: &Response) -> String {
-        let mut response_str = String::new();
-
-        // Add the HTTP version and status code to the response string
-        response_str.push_str(format!("{} ", &response.http_version).as_str());
-        response_str.push_str(format!("{} ", response.status_code.as_u16()).as_str());
-        response_str.push_str(
-            format!(
-                "{}\r\n",
-                response.status_code.canonical_reason().unwrap_or_default()
-            )
-            .as_str(),
-        );
-
-        // Add headers to the response string
-        for (key, value) in response.headers.iter() {
-            response_str.push_str(format!("{}: {}\r\n", key, value).as_str());
-        }
-
-        // Add body to the response string
-        response_str.push_str(format!("\r\n{}", response.body).as_str());
-
-        response_str
     }
 }
