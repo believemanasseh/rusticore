@@ -64,9 +64,13 @@ fn main() {
 }
 ```
 
-## Configuration
+## Testing
 
-Logging is configured via `config/log4rs.yaml`. Edit this file to change log levels, output destinations, and formats.
+To run tests, use:
+
+```sh
+cargo test
+```
 
 ## License
 
