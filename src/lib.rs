@@ -4,6 +4,7 @@ mod response;
 mod routing;
 mod server;
 
+pub use logging::init_logging;
 pub use routing::Route;
 pub use server::Server;
 pub use server::ServerState;

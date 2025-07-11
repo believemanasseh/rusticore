@@ -62,7 +62,7 @@ impl Server {
     /// # Examples
     ///
     /// ```
-    /// use rusticore::server::Server;
+    /// use rusticore::Server;
     /// let mut server = Server::new(String::from("localhost"), 8080, false, None);
     /// ```
     pub fn new(host: String, port: u16, debug: bool, log_output: Option<String>) -> Self {

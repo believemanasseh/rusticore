@@ -19,7 +19,7 @@ use log4rs::encode::pattern::PatternEncoder;
 ///
 /// ```
 /// use log::{info, error};
-/// use rusticore::logging::init_logging;
+/// use rusticore::init_logging;
 ///
 /// let success = init_logging(Some(String::from("logs/app.log")), true);
 /// if success {
