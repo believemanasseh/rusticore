@@ -61,7 +61,7 @@ impl Server {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// use rusticore::server::Server;
     /// let mut server = Server::new(String::from("localhost"), 8080, false, None);
     /// ```
@@ -182,6 +182,7 @@ impl Server {
     /// Renders the index route by creating a new `Route` instance and handling it.
     ///
     /// # Arguments
+    ///
     /// * `req` - A mutable reference to the `Request` object representing the incoming request.
     /// * `stream` - A `TcpStream` representing the connection to the client.
     /// * `target` - A string slice representing the target for logging.

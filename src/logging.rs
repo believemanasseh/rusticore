@@ -17,7 +17,7 @@ use log4rs::encode::pattern::PatternEncoder;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// use log::{info, error};
 /// use rusticore::logging::init_logging;
 ///

@@ -27,6 +27,7 @@ pub struct Request {
     pub accept: Option<String>,
     /// The user agent header, indicating the client software making the request.
     pub user_agent: Option<String>,
+    /// The server instance that is handling the request.
     pub server: Arc<Server>,
 }
 

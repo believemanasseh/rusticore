@@ -18,7 +18,7 @@ pub struct Response {
     pub body: String,
     /// An optional TCP stream to which the response will be sent.
     pub tcp_stream: Option<TcpStream>,
-    /// The server that is handling the response.
+    /// The server instance that is handling the response.
     pub server: Arc<Server>,
 }
 
