@@ -1,6 +1,6 @@
 use log::{error, info};
 use rusticore::run_server;
-use rusticore::server::ServerState;
+use rusticore::ServerState;
 
 /// The main entry point of the server.
 fn main() {

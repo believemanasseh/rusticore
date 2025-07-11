@@ -89,9 +89,9 @@ impl Server {
             init_logging(None, self.debug);
         }
 
-        let target = if self.debug { "app::core" } else { "app::none" };
-
         info!("Starting server at {}:{}", self.host, self.port);
+
+        let target = if self.debug { "app::core" } else { "app::none" };
 
         if self.debug {
             info!(target: target, "Debug mode is enabled.");

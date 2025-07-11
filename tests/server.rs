@@ -1,5 +1,5 @@
 use rusticore::run_server;
-use rusticore::server::ServerState;
+use rusticore::ServerState;
 
 #[test]
 fn test_server() {

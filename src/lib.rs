@@ -1,11 +1,12 @@
-pub mod logging;
+mod logging;
 mod request;
 mod response;
-pub mod routing;
-pub mod server;
+mod routing;
+mod server;
 
 pub use routing::Route;
 pub use server::Server;
+pub use server::ServerState;
 
 /// Starts the server using default settings.
 ///

@@ -53,8 +53,8 @@ After building, run the server:
 Import and use in your Rust project:
 
 ```rust
-use rusticore::server::Server;
-use rusticore::routing::Route;
+use rusticore::Server;
+use rusticore::Route;
 
 fn main() {
     let mut server = Server::new(String::from("localhost"), 9000, false, None);
