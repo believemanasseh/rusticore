@@ -1,5 +1,9 @@
 use http::StatusCode;
+use std::io::Write;
+use std::net::TcpStream;
+use std::ops::Deref;
 
+/// Represents an HTTP response that can be sent back to a client.
 pub struct Response {
     /// The HTTP status code of the response.
     pub status_code: StatusCode,
@@ -9,15 +13,19 @@ pub struct Response {
     pub headers: Vec<(String, String)>,
     /// The body of the response.
     pub body: String,
+    /// The TCP stream to which the response will be sent.
+    pub tcp_stream: TcpStream,
 }
 
 impl Response {
     /// Constructs the HTTP response string from the provided `Response` object.
     ///
     /// # Arguments
+    ///
     /// * `response` - A reference to a `Response` object containing the HTTP response data.
     ///
     /// # Returns
+    ///
     /// A `String` representing the complete HTTP response formatted as a string.
     pub fn construct_response_str(&self, response: &Response) -> String {
         let mut response_str = String::new();
@@ -42,5 +50,16 @@ impl Response {
         response_str.push_str(format!("\r\n{}", response.body).as_str());
 
         response_str
+    }
+
+    /// Constructs a new response string from a `Response` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - The body of the response as a `String`.
+    pub fn send(&mut self, body: String) {
+        self.body = body;
+        let response_str = self.construct_response_str(self.deref());
+        self.tcp_stream.write_all(response_str.as_bytes()).unwrap()
     }
 }

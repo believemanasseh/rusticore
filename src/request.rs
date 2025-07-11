@@ -32,9 +32,11 @@ impl Request {
     /// from the provided `TcpStream`.
     ///
     /// # Arguments
+    ///
     /// * `stream` - A `TcpStream` reference representing the incoming connection.
     ///
     /// # Returns
+    ///
     /// A new `Request` instance with the HTTP method and path parsed from the request line.
     pub fn new(stream: &TcpStream) -> Self {
         let dummy = Self {
@@ -66,9 +68,11 @@ impl Request {
     /// Handles the incoming connection by reading the HTTP request lines from the `TcpStream`.
     ///
     /// # Arguments
+    ///
     /// * `stream` - A `TcpStream` reference representing the incoming connection.
     ///
     /// # Returns
+    ///
     /// A `HashMap<String, String>` containing the parsed HTTP request data.
     fn handle_connection(&self, stream: &TcpStream) -> HashMap<String, String> {
         let buf_reader = BufReader::new(stream);

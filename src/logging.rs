@@ -7,9 +7,12 @@ use log4rs::encode::pattern::PatternEncoder;
 /// Initialises the logging configuration for the server.
 ///
 /// # Arguments
+///
 /// * `log_output` - An optional string specifying the log output destination.
+/// * `debug` - A boolean indicating whether debug mode is enabled.
 ///
 /// # Returns
+///
 /// `true` if the logging configuration was successfully initialised, `false` otherwise.
 ///
 /// # Examples

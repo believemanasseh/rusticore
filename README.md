@@ -54,13 +54,15 @@ Import and use in your Rust project:
 
 ```rust
 use rusticore::server::Server;
+use rusticore::routing::Route;
 
 fn main() {
     let mut server = Server("localhost".to_string(), 9000, false, None);
     server.start();
-    server.add_route("/hello", |req, res| {
+    let route = Route::new("GET", "/hello", |req, res| {
         res.send("Hello, world!");
     });
+    server.add_route(route);
 }
 ```
 
