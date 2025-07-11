@@ -1,10 +1,12 @@
-use log::warn;
+use crate::Server;
+use log::{error, warn};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
+use std::sync::Arc;
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Represents an HTTP request parsed from a `TcpStream`.
 pub struct Request {
     /// The HTTP method (e.g., GET, POST) of the request.
@@ -25,6 +27,7 @@ pub struct Request {
     pub accept: Option<String>,
     /// The user agent header, indicating the client software making the request.
     pub user_agent: Option<String>,
+    pub server: Arc<Server>,
 }
 
 impl Request {
@@ -33,12 +36,12 @@ impl Request {
     ///
     /// # Arguments
     ///
-    /// * `stream` - A `TcpStream` reference representing the incoming connection.
+    /// * `stream` - A `TcpStream` mutable reference representing the incoming connection.
     ///
     /// # Returns
     ///
-    /// A new `Request` instance with the HTTP method and path parsed from the request line.
-    pub fn new(stream: &TcpStream) -> Self {
+    /// A tuple containing a `Request` instance and a `HashMap<String, String>` with the parsed request data.
+    pub fn new(stream: &TcpStream, server: &mut Server) -> (Self, HashMap<String, String>) {
         let dummy = Self {
             method: None,
             path: None,
@@ -49,20 +52,11 @@ impl Request {
             cache_control: None,
             accept: None,
             user_agent: None,
+            server: Arc::from(server.to_owned()),
         };
         let request_data = dummy.handle_connection(stream);
-
-        Request {
-            method: Option::from(request_data["method"].to_string()),
-            path: Option::from(request_data["path"].to_string()),
-            http_version: Option::from(request_data["http_version"].to_string()),
-            host: Option::from(request_data["host"].to_string()),
-            connection: Option::from(request_data["connection"].to_string()),
-            cookies: Option::from(request_data["cookies"].to_string()),
-            cache_control: Option::from(request_data["cache_control"].to_string()),
-            accept: Option::from(request_data["accept"].to_string()),
-            user_agent: Option::from(request_data["user_agent"].to_string()),
-        }
+        let request_obj = dummy.convert_hashmap_to_request(&request_data);
+        (request_obj, request_data)
     }
 
     /// Handles the incoming connection by reading the HTTP request lines from the `TcpStream`.
@@ -74,13 +68,25 @@ impl Request {
     /// # Returns
     ///
     /// A `HashMap<String, String>` containing the parsed HTTP request data.
-    fn handle_connection(&self, stream: &TcpStream) -> HashMap<String, String> {
-        let buf_reader = BufReader::new(stream);
-        let http_request: Vec<String> = buf_reader
-            .lines()
-            .map(|result| result.unwrap())
-            .take_while(|line| !line.is_empty())
-            .collect();
+    pub fn handle_connection(&self, stream: &TcpStream) -> HashMap<String, String> {
+        let target = if self.server.debug {
+            "app::core"
+        } else {
+            "app::none"
+        };
+        let mut buf_reader = BufReader::new(stream);
+        let mut http_request = Vec::new();
+
+        for line in buf_reader.by_ref().lines() {
+            match line {
+                Ok(l) if !l.is_empty() => http_request.push(l),
+                Ok(_) => break,
+                Err(e) => {
+                    error!(target: target, "Error reading from stream: {}", e);
+                    break;
+                }
+            }
+        }
 
         let mut method: Option<&str> = None;
         let mut path: Option<&str> = None;
@@ -155,5 +161,29 @@ impl Request {
             ),
             ("accept".to_string(), accept.unwrap().to_string()),
         ])
+    }
+
+    /// Converts a `HashMap<String, String>` containing request data into a `Request` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `request_data` - A `HashMap<String, String>` reference containing the request data.
+    ///
+    /// # Returns
+    ///
+    /// A new `Request` instance populated with the data from the `HashMap`.
+    pub fn convert_hashmap_to_request(&self, request_data: &HashMap<String, String>) -> Self {
+        Request {
+            method: Option::from(request_data["method"].to_string()),
+            path: Option::from(request_data["path"].to_string()),
+            http_version: Option::from(request_data["http_version"].to_string()),
+            host: Option::from(request_data["host"].to_string()),
+            connection: Option::from(request_data["connection"].to_string()),
+            cookies: Option::from(request_data["cookies"].to_string()),
+            cache_control: Option::from(request_data["cache_control"].to_string()),
+            accept: Option::from(request_data["accept"].to_string()),
+            user_agent: Option::from(request_data["user_agent"].to_string()),
+            server: self.server.to_owned(),
+        }
     }
 }

@@ -4,8 +4,6 @@ mod response;
 pub mod routing;
 pub mod server;
 
-use crate::server::ServerState;
-use log::info;
 pub use routing::Route;
 pub use server::Server;
 
@@ -20,14 +18,9 @@ pub use server::Server;
 ///
 /// # Returns
 ///
-/// `true` if the server started successfully, `false` otherwise.
-pub fn run_server(host: String, port: u16, debug: bool, log_output: Option<String>) -> bool {
+/// A `Server` instance that is running and ready to handle requests.
+pub fn run_server(host: String, port: u16, debug: bool, log_output: Option<String>) -> Server {
     let mut server = Server::new(host, port, debug, log_output);
     server.start();
-    let is_running = server.check_state(ServerState::Running).0;
-    if is_running {
-        let target = if debug { "app::core" } else { "app::none" };
-        info!(target: target, "Server started successfully.");
-    }
-    is_running
+    server
 }

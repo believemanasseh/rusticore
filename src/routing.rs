@@ -2,7 +2,7 @@ use crate::request::Request;
 use crate::response::Response;
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Represents a route in a web application.
 pub struct Route {
     /// The HTTP method for the route (e.g., GET, POST).
@@ -37,19 +37,20 @@ impl Route {
     ///
     /// # Arguments
     ///
-    /// * `req` - The reference to the incoming HTTP request object.
-    /// * `res` - The reference to the HTTP response object to which the handler will send the response.
+    /// * `req` - A mutable reference to the incoming HTTP request object.
+    /// * `res` - A mutable reference to the HTTP response object to which the handler will send the response.
     pub fn handle(&self, req: &mut Request, res: &mut Response) {
         (self.handler)(req, res)
     }
 }
 
+#[allow(unused_variables)]
 /// A simple handler function for the index route.
 ///
 /// # Arguments
 ///
-/// * `req` - The reference to the incoming HTTP request object.
-/// * `res` - The reference to the HTTP response object to which the message will be sent.
+/// * `req` - A mutable reference to the incoming HTTP request object.
+/// * `res` - A mutable reference to the HTTP response object to which the message will be sent.
 pub fn index(req: &mut Request, res: &mut Response) {
     res.send(String::from("Welcome to the index page!"))
 }

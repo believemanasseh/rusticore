@@ -6,11 +6,11 @@ use crate::Route;
 use http::StatusCode;
 use log::info;
 use std::cmp::PartialEq;
-use std::io::Write;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Represents the possible states of a server.
 pub enum ServerState {
     /// The server is in the process of starting up.
@@ -24,6 +24,7 @@ pub enum ServerState {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 /// Represents a server configuration with various parameters.
 pub struct Server {
     /// The hostname or IP address where the server will run.
@@ -38,6 +39,10 @@ pub struct Server {
     pub state: ServerState,
     /// A vector of routes that the server will handle.
     pub routes: Vec<Route>,
+    /// An optional request object representing the incoming HTTP request.
+    pub request: Option<Request>,
+    /// An optional response object representing the HTTP response to be sent.
+    pub response: Option<Response>,
 }
 
 impl Server {
@@ -68,12 +73,16 @@ impl Server {
             log_output,
             state: ServerState::Starting,
             routes: Vec::from([Route::new(String::from("GET"), String::from("/"), index)]),
+            request: None,
+            response: None,
         }
     }
 
     /// Starts the server, binding it to the specified host and port.
     /// It initialises logging, listens for incoming connections, and handles requests.
     pub fn start(&mut self) {
+        let server_clone = self.to_owned();
+
         if let Some(ref log) = self.log_output {
             init_logging(Some(log.to_string()), self.debug);
         } else {
@@ -92,26 +101,28 @@ impl Server {
             info!(target: target, "Logging output to: {log}");
         }
 
+        // Bind the server to the specified host and port.
         let listener = TcpListener::bind(format!("{}:{}", self.host, self.port)).unwrap();
 
         self.state = ServerState::Running;
         info!(target: target, "Server state: {:?}", self.state);
 
         for stream in listener.incoming() {
-            let mut stream = stream.unwrap();
+            let stream = stream.unwrap();
             info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
-            let request = Request::new(&stream);
-            info!(target: target, "Received request: {:#?}", request);
 
-            let response = Response {
-                status_code: StatusCode::OK,
-                body: String::from("Hello, World!"),
-                http_version: String::from("HTTP/1.1"),
-                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
-                tcp_stream: stream.try_clone().unwrap(),
-            };
-            let response_str = response.construct_response_str(&response);
-            stream.write_all(response_str.as_bytes()).unwrap()
+            let (request, _request_data) = Request::new(&stream, self);
+            self.request = Some(request);
+
+            let req = self.request.as_mut().unwrap();
+            info!(target: target, "Received request: {:#?}", req);
+
+            // Handle the request based on its path.
+            if req.path == Some(String::from("/")) {
+                server_clone.render_index_route(req, stream, target);
+            } else {
+                info!(target: target, "Handling route: {:#?}", req.path);
+            }
         }
     }
 
@@ -166,5 +177,29 @@ impl Server {
     /// A string slice representing the target for logging.
     fn get_target(&self) -> &str {
         if self.debug { "app::core" } else { "app::none" }
+    }
+
+    /// Renders the index route by creating a new `Route` instance and handling it.
+    ///
+    /// # Arguments
+    /// * `req` - A mutable reference to the `Request` object representing the incoming request.
+    /// * `stream` - A `TcpStream` representing the connection to the client.
+    /// * `target` - A string slice representing the target for logging.
+    fn render_index_route(&self, req: &mut Request, stream: TcpStream, target: &str) {
+        info!(target: target, "Rendering index route: {:#?}", self.routes[0]);
+        let res = &mut Response {
+            status_code: StatusCode::OK,
+            body: String::from(""),
+            http_version: String::from("HTTP/1.1"),
+            headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+            tcp_stream: stream.try_clone().ok(),
+            server: Arc::from(self.to_owned()),
+        };
+        let route = Route::new(
+            req.method.clone().unwrap_or_default(),
+            req.path.clone().unwrap_or_default(),
+            index,
+        );
+        route.handle(req, res)
     }
 }

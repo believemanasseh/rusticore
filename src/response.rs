@@ -1,8 +1,11 @@
+use crate::Server;
 use http::StatusCode;
 use std::io::Write;
 use std::net::TcpStream;
 use std::ops::Deref;
+use std::sync::Arc;
 
+#[derive(Debug)]
 /// Represents an HTTP response that can be sent back to a client.
 pub struct Response {
     /// The HTTP status code of the response.
@@ -13,8 +16,28 @@ pub struct Response {
     pub headers: Vec<(String, String)>,
     /// The body of the response.
     pub body: String,
-    /// The TCP stream to which the response will be sent.
-    pub tcp_stream: TcpStream,
+    /// An optional TCP stream to which the response will be sent.
+    pub tcp_stream: Option<TcpStream>,
+    /// The server that is handling the response.
+    pub server: Arc<Server>,
+}
+
+impl Clone for Response {
+    /// Creates a clone of the `Response` object.
+    ///
+    /// # Returns
+    ///
+    /// A new `Response` instance with the same status code, HTTP version, headers, body, and TCP stream.
+    fn clone(&self) -> Self {
+        Response {
+            status_code: self.status_code,
+            http_version: self.http_version.clone(),
+            headers: self.headers.clone(),
+            body: self.body.clone(),
+            tcp_stream: self.tcp_stream.as_ref().and_then(|s| s.try_clone().ok()),
+            server: Arc::clone(&self.server),
+        }
+    }
 }
 
 impl Response {
@@ -60,6 +83,10 @@ impl Response {
     pub fn send(&mut self, body: String) {
         self.body = body;
         let response_str = self.construct_response_str(self.deref());
-        self.tcp_stream.write_all(response_str.as_bytes()).unwrap()
+        if let Some(ref mut tcp_stream) = self.tcp_stream {
+            tcp_stream.write_all(response_str.as_bytes()).unwrap()
+        } else {
+            panic!("TCP stream is not set. Cannot send response.");
+        }
     }
 }
