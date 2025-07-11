@@ -121,7 +121,7 @@ impl Server {
             if req.path == Some(String::from("/")) {
                 server_clone.render_index_route(req, stream, target);
             } else {
-                info!(target: target, "Handling route: {:#?}", req.path);
+                info!(target: target, "Handling route: {}", req.path.clone().unwrap());
             }
         }
     }
@@ -179,7 +179,7 @@ impl Server {
         if self.debug { "app::core" } else { "app::none" }
     }
 
-    /// Renders the index route by creating a new `Route` instance and handling it.
+    /// Renders the index route by reusing the initially created `Route` instance and handling it.
     ///
     /// # Arguments
     ///
@@ -196,11 +196,6 @@ impl Server {
             tcp_stream: stream.try_clone().ok(),
             server: Arc::from(self.to_owned()),
         };
-        let route = Route::new(
-            req.method.clone().unwrap_or_default(),
-            req.path.clone().unwrap_or_default(),
-            index,
-        );
-        route.handle(req, res)
+        self.routes[0].handle(req, res)
     }
 }
