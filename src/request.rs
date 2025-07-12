@@ -56,7 +56,7 @@ impl Request {
             server: Arc::from(server.to_owned()),
         };
         let request_data = dummy.handle_connection(stream);
-        let request_obj = dummy.convert_hashmap_to_request(&request_data);
+        let request_obj = dummy.convert_hashmap_to_request(request_data.to_owned());
         (request_obj, request_data)
     }
 
@@ -76,15 +76,18 @@ impl Request {
             "app::none"
         };
         let mut buf_reader = BufReader::new(stream);
-        let mut http_request = Vec::new();
+        let mut http_request = String::new();
 
         for line in buf_reader.by_ref().lines() {
             match line {
-                Ok(l) if !l.is_empty() => http_request.push(l),
+                Ok(l) if !l.is_empty() => {
+                    http_request.push_str(&l);
+                    http_request.push('\n');
+                }
                 Ok(_) => break,
                 Err(e) => {
                     error!(target: target, "Error reading from stream: {}", e);
-                    break;
+                    panic!("Error reading from stream: {}", e);
                 }
             }
         }
@@ -103,7 +106,7 @@ impl Request {
             "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
         ];
 
-        for line in http_request.iter() {
+        for line in http_request.lines() {
             if line.contains("HTTP/") {
                 let mut parts = line.split_whitespace();
                 method = parts.next();
@@ -173,17 +176,17 @@ impl Request {
     /// # Returns
     ///
     /// A new `Request` instance populated with the data from the `HashMap`.
-    pub fn convert_hashmap_to_request(&self, request_data: &HashMap<String, String>) -> Self {
+    pub fn convert_hashmap_to_request(&self, request_data: HashMap<String, String>) -> Self {
         Request {
-            method: Option::from(request_data["method"].to_string()),
-            path: Option::from(request_data["path"].to_string()),
-            http_version: Option::from(request_data["http_version"].to_string()),
-            host: Option::from(request_data["host"].to_string()),
-            connection: Option::from(request_data["connection"].to_string()),
-            cookies: Option::from(request_data["cookies"].to_string()),
-            cache_control: Option::from(request_data["cache_control"].to_string()),
-            accept: Option::from(request_data["accept"].to_string()),
-            user_agent: Option::from(request_data["user_agent"].to_string()),
+            method: Option::from(request_data["method"].clone()),
+            path: Option::from(request_data["path"].clone()),
+            http_version: Option::from(request_data["http_version"].clone()),
+            host: Option::from(request_data["host"].clone()),
+            connection: Option::from(request_data["connection"].clone()),
+            cookies: Option::from(request_data["cookies"].clone()),
+            cache_control: Option::from(request_data["cache_control"].clone()),
+            accept: Option::from(request_data["accept"].clone()),
+            user_agent: Option::from(request_data["user_agent"].clone()),
             server: self.server.to_owned(),
         }
     }
