@@ -1,193 +1,251 @@
 use crate::Server;
-use log::{error, warn};
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read};
+use http::method::Method;
+use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+/// Represents a span of text in the HTTP request, defined by its start position and length.
+struct Span {
+    start: usize,
+    length: usize,
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 /// Represents an HTTP request parsed from a `TcpStream`.
 pub struct Request {
     /// The HTTP method (e.g., GET, POST) of the request.
-    pub method: Option<String>,
+    method: Option<Span>,
     /// The route or path requested (e.g., /index).
-    pub path: Option<String>,
+    path: Option<Span>,
     /// The HTTP version used in the request (e.g., HTTP/1.1).
-    pub http_version: Option<String>,
-    /// The host header from the request, indicating the server's hostname.
-    pub host: Option<String>,
-    /// The connection header, indicating whether the connection should be kept alive.
-    pub connection: Option<String>,
-    /// The cookies sent with the request, if any.
-    pub cookies: Option<String>,
-    /// The cache control header, indicating caching policies.
-    pub cache_control: Option<String>,
-    /// The accept header, indicating the media types that are acceptable for the response.
-    pub accept: Option<String>,
-    /// The user agent header, indicating the client software making the request.
-    pub user_agent: Option<String>,
+    http_version: Option<Span>,
+    /// The span of the HTTP headers in the request.
+    headers: Option<Vec<(Span, Span)>>,
+    /// The buffer containing the raw HTTP request data.
+    buffer: Vec<u8>,
+    /// The cursor position in the buffer, used for parsing.
+    cursor: usize,
     /// The server instance that is handling the request.
-    pub server: Arc<Server>,
+    server: Arc<Server>,
 }
 
 impl Request {
-    /// Creates a new `Request` instance by reading the first line of the HTTP request
-    /// from the provided `TcpStream`.
-    ///
-    /// # Arguments
-    ///
-    /// * `stream` - A `TcpStream` mutable reference representing the incoming connection.
-    ///
-    /// # Returns
-    ///
-    /// A tuple containing a `Request` instance and a `HashMap<String, String>` with the parsed request data.
-    pub fn new(stream: &TcpStream, server: &mut Server) -> (Self, HashMap<String, String>) {
-        let dummy = Self {
-            method: None,
-            path: None,
-            http_version: None,
-            host: None,
-            connection: None,
-            cookies: None,
-            cache_control: None,
-            accept: None,
-            user_agent: None,
-            server: Arc::from(server.to_owned()),
-        };
-        let request_data = dummy.handle_connection(stream);
-        let request_obj = dummy.convert_hashmap_to_request(request_data.to_owned());
-        (request_obj, request_data)
-    }
-
-    /// Handles the incoming connection by reading the HTTP request lines from the `TcpStream`.
+    /// Creates a new `Request` instance by reading the HTTP request from the
+    /// provided `TcpStream`.
     ///
     /// # Arguments
     ///
     /// * `stream` - A `TcpStream` reference representing the incoming connection.
+    /// * `server` - A mutable reference to the `Server` instance that will handle the request.
     ///
     /// # Returns
     ///
-    /// A `HashMap<String, String>` containing the parsed HTTP request data.
-    pub fn handle_connection(&self, stream: &TcpStream) -> HashMap<String, String> {
-        let target = if self.server.debug {
-            "app::core"
-        } else {
-            "app::none"
-        };
-        let mut buf_reader = BufReader::new(stream);
-        let mut http_request = String::new();
-
-        for line in buf_reader.by_ref().lines() {
-            match line {
-                Ok(l) if !l.is_empty() => {
-                    http_request.push_str(&l);
-                    http_request.push('\n');
-                }
-                Ok(_) => break,
-                Err(e) => {
-                    error!(target: target, "Error reading from stream: {}", e);
-                    panic!("Error reading from stream: {}", e);
-                }
-            }
+    /// A `Result` containing a `Request` instance if successful, or an error message if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
+    /// if there is an error reading from the stream, or if the headers are too large.
+    pub fn new(stream: &TcpStream, server: &mut Server) -> Result<Self, &'static str> {
+        let res = Request::parse(stream, server);
+        match res {
+            Ok(req) => Ok(req),
+            Err(e) => Err(e),
         }
-
-        let mut method: Option<&str> = None;
-        let mut path: Option<&str> = None;
-        let mut http_version: Option<&str> = None;
-        let mut host: Option<&str> = None;
-        let mut connection: Option<&str> = None;
-        let mut cookies: Option<&str> = None;
-        let mut cache_control: Option<&str> = None;
-        let mut user_agent: Option<&str> = None;
-        let mut accept: Option<&str> = None;
-
-        let valid_http_methods: [&str; 8] = [
-            "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
-        ];
-
-        for line in http_request.lines() {
-            if line.contains("HTTP/") {
-                let mut parts = line.split_whitespace();
-                method = parts.next();
-                path = parts.next();
-                http_version = parts.next()
-            } else if line.contains("Host:") {
-                host = line.split_whitespace().nth(1)
-            } else if line.contains("Connection:") {
-                connection = line.split_whitespace().nth(1)
-            } else if line.contains("Cache-Control:") {
-                cache_control = line.split_whitespace().nth(1)
-            } else if line.contains("Accept:") {
-                accept = line.split_whitespace().nth(1)
-            } else if line.contains("User-Agent:") {
-                user_agent = Option::from(line.split_once(" ").unwrap().1)
-            } else if line.contains("Cookie:") {
-                cookies = Option::from(line.split_once(" ").unwrap().1)
-            }
-        }
-
-        if !method.is_none() && !valid_http_methods.contains(&method.unwrap()) {
-            panic!("Invalid HTTP method parsed: {}", method.unwrap());
-        } else if method.is_none() {
-            panic!("No HTTP method found in the request.");
-        } else if path.is_none() {
-            panic!("No HTTP path found in the request.");
-        } else if http_version.is_none() {
-            panic!("No HTTP version found in the request.");
-        } else if host.is_none() {
-            warn!("No Host header found in the request.");
-        } else if connection.is_none() {
-            warn!("No Connection header found in the request.");
-        } else if cookies.is_none() {
-            warn!("No Cookies header found in the request.");
-        } else if cache_control.is_none() {
-            warn!("No Cache-Control header found in the request.");
-        }
-
-        HashMap::from([
-            ("method".to_string(), method.unwrap().to_string()),
-            ("path".to_string(), path.unwrap().to_string()),
-            (
-                "http_version".to_string(),
-                http_version.unwrap().to_string(),
-            ),
-            ("host".to_string(), host.unwrap().to_string()),
-            ("connection".to_string(), connection.unwrap().to_string()),
-            ("cookies".to_string(), cookies.unwrap().to_string()),
-            (
-                "cache_control".to_string(),
-                cache_control.unwrap_or_default().to_string(),
-            ),
-            (
-                "user_agent".to_string(),
-                user_agent.unwrap_or_default().to_string(),
-            ),
-            ("accept".to_string(), accept.unwrap().to_string()),
-        ])
     }
 
-    /// Converts a `HashMap<String, String>` containing request data into a `Request` instance.
+    /// Handles the incoming connection by reading the HTTP request lines and headers from the `TcpStream`.
     ///
     /// # Arguments
     ///
-    /// * `request_data` - A `HashMap<String, String>` reference containing the request data.
+    /// * `stream` - A `TcpStream` reference representing the incoming connection.
+    /// * `server` - A mutable reference to the `Server` instance that will handle the request.
     ///
     /// # Returns
     ///
-    /// A new `Request` instance populated with the data from the `HashMap`.
-    pub fn convert_hashmap_to_request(&self, request_data: HashMap<String, String>) -> Self {
-        Request {
-            method: Option::from(request_data["method"].clone()),
-            path: Option::from(request_data["path"].clone()),
-            http_version: Option::from(request_data["http_version"].clone()),
-            host: Option::from(request_data["host"].clone()),
-            connection: Option::from(request_data["connection"].clone()),
-            cookies: Option::from(request_data["cookies"].clone()),
-            cache_control: Option::from(request_data["cache_control"].clone()),
-            accept: Option::from(request_data["accept"].clone()),
-            user_agent: Option::from(request_data["user_agent"].clone()),
-            server: self.server.to_owned(),
+    /// A `Result` containing a `Request` instance if successful, or an error message if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
+    /// if there is an error reading from the stream, or if the headers are too large.
+    fn parse(stream: &TcpStream, server: &mut Server) -> Result<Request, &'static str> {
+        let mut request = Request {
+            method: None,
+            path: None,
+            http_version: None,
+            headers: Some(Vec::new()),
+            buffer: Vec::new(),
+            cursor: 0,
+            server: Arc::from(server.to_owned()),
+        };
+
+        let mut buf_reader = BufReader::new(stream);
+        let mut headers_len = 0;
+        loop {
+            let bytes = match buf_reader.read_until(b'\n', request.buffer.as_mut()) {
+                Ok(0) => Err("Connection closed by peer"),
+                Ok(n) => Ok(n),
+                Err(_) => Err("Error reading from stream"),
+            };
+
+            if let Ok(size) = bytes {
+                headers_len += size;
+            } else {
+                return Err("Failed to read from stream");
+            }
+
+            // Checks for the end of the headers section
+            if request.buffer.ends_with(b"\r\n\r\n") {
+                break;
+            }
+
+            if headers_len > 4096 {
+                return Err("Headers too large");
+            }
         }
+
+        // Parse request line (e.g., "GET /path HTTP/1.1")
+        if let Some(line_end) = request.buffer[request.cursor..]
+            .iter()
+            .position(|&b| b == b'\n')
+        {
+            let line = &request.buffer[request.cursor..request.cursor + line_end];
+            let mut parts = line.split(|&b| b == b' ');
+
+            if let Some(method_bytes) = parts.next() {
+                request.method = Some(Span {
+                    start: request.cursor,
+                    length: method_bytes.len(),
+                });
+            }
+            let method_len = request.method.as_mut().map_or(0, |s| s.length);
+
+            if let Some(path_bytes) = parts.next() {
+                request.path = Some(Span {
+                    start: request.cursor + method_len + 1,
+                    length: path_bytes.len(),
+                });
+            }
+
+            request.cursor += line_end + 1; // Move cursor to headers start
+        } else {
+            return Err("Invalid request line");
+        }
+
+        // Parse headers
+        loop {
+            if let Some(line_end) = request.buffer[request.cursor..]
+                .iter()
+                .position(|&b| b == b'\n')
+            {
+                let line = &request.buffer[request.cursor..request.cursor + line_end];
+
+                if line.is_empty() || line == b"\r" {
+                    request.cursor += line_end + 3; // Move cursor to the request body
+                    break; // End of headers
+                }
+
+                if let Some(colon_pos) = line.iter().position(|&b| b == b':') {
+                    let key = Span {
+                        start: request.cursor,
+                        length: colon_pos,
+                    };
+                    let value_start = request.cursor + colon_pos + 1;
+                    let value_end = line.iter().position(|&b| b == b'\r').unwrap_or(line.len());
+                    let value = Span {
+                        start: value_start,
+                        length: value_end - colon_pos - 1,
+                    };
+
+                    request.headers.as_mut().unwrap().push((key, value));
+                }
+
+                request.cursor += line_end + 1; // Move cursor to the next line
+            }
+        }
+
+        Ok(request)
+    }
+
+    /// Returns the HTTP path of the request.
+    ///
+    /// # Returns
+    ///
+    /// A string slice representing the path of the request.
+    pub fn path(&self) -> &str {
+        if let Some(span) = &self.path {
+            std::str::from_utf8(&self.buffer[span.start..span.start + span.length])
+                .expect("Invalid UTF-8 in path")
+        } else {
+            panic!("Path not found in request");
+        }
+    }
+
+    /// Returns the HTTP method of the request.
+    ///
+    /// # Returns
+    ///
+    /// The HTTP method variant (e.g., Method::GET, Method::POST).
+    pub fn method(&self) -> Method {
+        if let Some(span) = &self.method {
+            std::str::from_utf8(&self.buffer[span.start..span.start + span.length])
+                .expect("Invalid UTF-8 in method")
+                .parse::<Method>()
+                .expect("Failed to parse HTTP method")
+        } else {
+            panic!("Method not found in request");
+        }
+    }
+
+    /// Returns the HTTP version of the request.
+    ///
+    /// # Returns
+    ///
+    /// A string slice representing the HTTP version (e.g., HTTP/1.1, HTTP/2).
+    pub fn http_version(&self) -> &str {
+        if let Some(span) = &self.http_version {
+            std::str::from_utf8(&self.buffer[span.start..span.start + span.length])
+                .expect("Invalid UTF-8 in HTTP version")
+        } else {
+            panic!("HTTP version not found in request");
+        }
+    }
+
+    /// Returns the raw bytes for any content type in the HTTP request.
+    ///
+    /// # Returns
+    ///
+    /// A slice of bytes representing the body of the request.
+    pub fn body(&self) -> &[u8] {
+        &self.buffer[self.cursor..]
+    }
+
+    /// Returns the value of a specific header from the HTTP request.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A string slice representing the header key to look for (case-insensitive).
+    ///
+    /// # Returns
+    ///
+    /// An `Option<&str>` containing the value of the header if found, or `None` if the header does not exist.
+    pub fn get_header(&self, key: &str) -> Option<&str> {
+        if let Some(headers) = &self.headers {
+            for (k, v) in headers {
+                if let Ok(header_key) =
+                    std::str::from_utf8(&self.buffer[k.start..k.start + k.length])
+                {
+                    if header_key.eq_ignore_ascii_case(key) {
+                        return Some(
+                            std::str::from_utf8(&self.buffer[v.start..v.start + v.length]).unwrap(),
+                        );
+                    }
+                }
+            }
+        }
+        None
     }
 }

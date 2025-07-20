@@ -21,8 +21,15 @@ pub use server::ServerState;
 /// # Returns
 ///
 /// A `Server` instance that is running and ready to handle requests.
-pub fn run_server(host: String, port: u16, debug: bool, log_output: Option<String>) -> Server {
+pub fn run_server<'a>(
+    host: String,
+    port: u16,
+    debug: bool,
+    log_output: Option<String>,
+) -> Result<Server, &'static str> {
     let mut server = Server::new(host, port, debug, log_output);
-    server.start();
-    server
+    match server.start() {
+        Ok(_) => Ok(server),
+        Err(e) => Err(e),
+    }
 }

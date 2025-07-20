@@ -39,10 +39,6 @@ pub struct Server {
     pub state: ServerState,
     /// A vector of routes that the server will handle.
     pub routes: Vec<Route>,
-    /// An optional request object representing the incoming HTTP request.
-    pub request: Option<Request>,
-    /// An optional response object representing the HTTP response to be sent.
-    pub response: Option<Response>,
 }
 
 impl Server {
@@ -73,14 +69,12 @@ impl Server {
             log_output,
             state: ServerState::Starting,
             routes: Vec::from([Route::new(String::from("GET"), String::from("/"), index)]),
-            request: None,
-            response: None,
         }
     }
 
     /// Starts the server, binding it to the specified host and port.
     /// It initialises logging, listens for incoming connections, and handles requests.
-    pub fn start(&mut self) {
+    pub fn start(&mut self) -> Result<(), &'static str> {
         let server_clone = self.to_owned();
 
         if let Some(ref log) = self.log_output {
@@ -111,19 +105,20 @@ impl Server {
             let stream = stream.unwrap();
             info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
 
-            let (request, _request_data) = Request::new(&stream, self);
-            self.request = Some(request);
-
-            let req = self.request.as_mut().unwrap();
-            info!(target: target, "Received request: {:#?}", req);
-
-            // Handle the request based on its path.
-            if req.path == Some(String::from("/")) {
-                server_clone.render_index_route(req, stream, target);
+            // Create a new request instance for the incoming connection.
+            if let Ok(ref mut req) = Request::new(&stream, self) {
+                // Handle the request based on its path.
+                if req.path() == "/" {
+                    server_clone.render_index_route(req, stream, target);
+                } else {
+                    info!(target: target, "Handling route: {}", req.path());
+                }
             } else {
-                info!(target: target, "Handling route: {}", req.path.clone().unwrap());
+                return Err("Failed to parse request");
             }
         }
+
+        Ok(())
     }
 
     /// Adds a new route to the server's routing vector.
@@ -190,9 +185,8 @@ impl Server {
         info!(target: target, "Rendering index route: {:#?}", self.routes[0]);
         let res = &mut Response {
             status_code: StatusCode::OK,
-            body: String::from(""),
-            http_version: String::from("HTTP/1.1"),
-            headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+            http_version: "HTTP/1.1",
+            headers: vec![("Content-Type", "text/plain")],
             tcp_stream: stream.try_clone().ok(),
             server: Arc::from(self.to_owned()),
         };

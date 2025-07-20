@@ -2,7 +2,6 @@ use crate::Server;
 use http::StatusCode;
 use std::io::Write;
 use std::net::TcpStream;
-use std::ops::Deref;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -11,11 +10,9 @@ pub struct Response {
     /// The HTTP status code of the response.
     pub status_code: StatusCode,
     /// The HTTP version of the response.
-    pub http_version: String,
+    pub http_version: &'static str,
     /// The headers of the response.
-    pub headers: Vec<(String, String)>,
-    /// The body of the response.
-    pub body: String,
+    pub headers: Vec<(&'static str, &'static str)>,
     /// An optional TCP stream to which the response will be sent.
     pub tcp_stream: Option<TcpStream>,
     /// The server instance that is handling the response.
@@ -31,9 +28,8 @@ impl Clone for Response {
     fn clone(&self) -> Self {
         Response {
             status_code: self.status_code,
-            http_version: self.http_version.clone(),
+            http_version: self.http_version,
             headers: self.headers.clone(),
-            body: self.body.clone(),
             tcp_stream: self.tcp_stream.as_ref().and_then(|s| s.try_clone().ok()),
             server: Arc::clone(&self.server),
         }
@@ -50,7 +46,7 @@ impl Response {
     /// # Returns
     ///
     /// A `String` representing the complete HTTP response formatted as a string.
-    pub fn construct_response_str(&self, response: &Response) -> String {
+    pub fn construct_response_str(&self, response: &Response, body: String) -> String {
         let mut response_str = String::new();
 
         // Add the HTTP version and status code to the response string
@@ -70,7 +66,7 @@ impl Response {
         }
 
         // Add body to the response string
-        response_str.push_str(format!("\r\n{}", response.body).as_str());
+        response_str.push_str(format!("\r\n{}", body).as_str());
 
         response_str
     }
@@ -81,8 +77,7 @@ impl Response {
     ///
     /// * `body` - The body of the response as a `String`.
     pub fn send(&mut self, body: String) {
-        self.body = body;
-        let response_str = self.construct_response_str(self.deref());
+        let response_str = self.construct_response_str(self, body);
         if let Some(ref mut tcp_stream) = self.tcp_stream {
             tcp_stream.write_all(response_str.as_bytes()).unwrap()
         } else {
