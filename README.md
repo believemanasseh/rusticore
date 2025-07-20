@@ -57,9 +57,9 @@ use rusticore::Server;
 use rusticore::Route;
 
 fn main() {
-    let mut server = Server::new(String::from("localhost"), 9000, false, None);
-    let route = Route::new(String::from("GET"), String::from("/hello"), |req, res| {
-        res.send(String::from("Hello, world!"));
+    let mut server = Server::new("localhost", 9000, false, None);
+    let route = Route::new("GET", "/hello", |req, res| {
+        res.send("Hello, world!");
     });
     server.add_route(route);
     server.start();
