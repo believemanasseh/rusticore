@@ -46,7 +46,7 @@ impl Response {
     /// # Returns
     ///
     /// A `String` representing the complete HTTP response formatted as a string.
-    pub fn construct_response_str(&self, response: &Response, body: String) -> String {
+    pub fn construct_response_str(&self, response: &Response, body: &str) -> String {
         let mut response_str = String::new();
 
         // Add the HTTP version and status code to the response string
@@ -76,7 +76,7 @@ impl Response {
     /// # Arguments
     ///
     /// * `body` - The body of the response as a `String`.
-    pub fn send(&mut self, body: String) {
+    pub fn send(&mut self, body: &str) {
         let response_str = self.construct_response_str(self, body);
         if let Some(ref mut tcp_stream) = self.tcp_stream {
             tcp_stream.write_all(response_str.as_bytes()).unwrap()

@@ -8,7 +8,7 @@ use log4rs::encode::pattern::PatternEncoder;
 ///
 /// # Arguments
 ///
-/// * `log_output` - An optional string specifying the log output destination.
+/// * `log_output` - An optional string slice specifying the log output destination.
 /// * `debug` - A boolean indicating whether debug mode is enabled.
 ///
 /// # Returns
@@ -21,14 +21,14 @@ use log4rs::encode::pattern::PatternEncoder;
 /// use log::{info, error};
 /// use rusticore::init_logging;
 ///
-/// let success = init_logging(Some(String::from("logs/app.log")), true);
+/// let success = init_logging(Some("logs/app.log"), true);
 /// if success {
 ///     info!("Logging initialised successfully.");
 /// } else {
 ///     error!("Failed to initialise logging.");
 /// }
 /// ```
-pub fn init_logging(log_output: Option<String>, debug: bool) -> bool {
+pub fn init_logging(log_output: Option<&'static str>, debug: bool) -> bool {
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
         .build();

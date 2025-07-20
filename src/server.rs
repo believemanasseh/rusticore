@@ -28,13 +28,13 @@ pub enum ServerState {
 /// Represents a server configuration with various parameters.
 pub struct Server {
     /// The hostname or IP address where the server will run.
-    pub host: String,
+    pub host: &'static str,
     /// The port number on which the server will listen.
     pub port: u16,
     /// A boolean indicating whether debug mode is enabled.
     pub debug: bool,
     /// An optional string specifying the log output destination.
-    pub log_output: Option<String>,
+    pub log_output: Option<&'static str>,
     /// The current state of the server.
     pub state: ServerState,
     /// A vector of routes that the server will handle.
@@ -59,26 +59,29 @@ impl Server {
     ///
     /// ```
     /// use rusticore::Server;
-    /// let mut server = Server::new(String::from("localhost"), 8080, false, None);
+    /// let mut server = Server::new("localhost", 8080, false, None);
     /// ```
-    pub fn new(host: String, port: u16, debug: bool, log_output: Option<String>) -> Self {
+    pub fn new(
+        host: &'static str,
+        port: u16,
+        debug: bool,
+        log_output: Option<&'static str>,
+    ) -> Self {
         Server {
             host,
             port,
             debug,
             log_output,
             state: ServerState::Starting,
-            routes: Vec::from([Route::new(String::from("GET"), String::from("/"), index)]),
+            routes: Vec::from([Route::new("GET", "/", index)]),
         }
     }
 
     /// Starts the server, binding it to the specified host and port.
     /// It initialises logging, listens for incoming connections, and handles requests.
     pub fn start(&mut self) -> Result<(), &'static str> {
-        let server_clone = self.to_owned();
-
-        if let Some(ref log) = self.log_output {
-            init_logging(Some(log.to_string()), self.debug);
+        if let Some(log) = self.log_output {
+            init_logging(Some(log), self.debug);
         } else {
             init_logging(None, self.debug);
         }
@@ -109,6 +112,7 @@ impl Server {
             if let Ok(ref mut req) = Request::new(&stream, self) {
                 // Handle the request based on its path.
                 if req.path() == "/" {
+                    let server_clone = self.to_owned();
                     server_clone.render_index_route(req, stream, target);
                 } else {
                     info!(target: target, "Handling route: {}", req.path());

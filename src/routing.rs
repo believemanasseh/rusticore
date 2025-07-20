@@ -6,9 +6,9 @@ use crate::response::Response;
 /// Represents a route in a web application.
 pub struct Route {
     /// The HTTP method for the route (e.g., GET, POST).
-    pub method: String,
+    pub method: &'static str,
     /// The path for the route (e.g., /home).
-    pub path: String,
+    pub path: &'static str,
     /// The handler function for the route.
     pub handler: fn(&mut Request, &mut Response),
 }
@@ -25,7 +25,11 @@ impl Route {
     /// # Returns
     ///
     /// A new `Route` instance.
-    pub fn new(method: String, path: String, handler: fn(&mut Request, &mut Response)) -> Self {
+    pub fn new(
+        method: &'static str,
+        path: &'static str,
+        handler: fn(&mut Request, &mut Response),
+    ) -> Self {
         Route {
             method,
             path,
@@ -52,5 +56,5 @@ impl Route {
 /// * `req` - A mutable reference to the incoming HTTP request object.
 /// * `res` - A mutable reference to the HTTP response object to which the message will be sent.
 pub fn index(req: &mut Request, res: &mut Response) {
-    res.send(String::from("Welcome to the index page!"))
+    res.send("Welcome to the index page!")
 }
