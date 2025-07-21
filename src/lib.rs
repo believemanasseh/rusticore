@@ -1,3 +1,4 @@
+mod buffer_pool;
 mod logging;
 mod request;
 mod response;
