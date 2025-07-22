@@ -79,7 +79,11 @@ impl Server {
 
     /// Starts the server, binding it to the specified host and port.
     /// It initialises logging, listens for incoming connections, and handles requests.
-    pub fn start(&mut self) -> Result<(), &'static str> {
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating success or failure of the server start operation.
+    pub fn start<'a>(&'a mut self) -> Result<(), &'static str> {
         if let Some(log) = self.log_output {
             init_logging(Some(log), self.debug);
         } else {
@@ -104,16 +108,18 @@ impl Server {
         self.state = ServerState::Running;
         info!(target: target, "Server state: {:?}", self.state);
 
+        // Create a smart pointer to share the server instance across threads.
+        let rc_server = Arc::new(self);
+
         for stream in listener.incoming() {
             let stream = stream.unwrap();
             info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
 
             // Create a new request instance for the incoming connection.
-            if let Ok(ref mut req) = Request::new(&stream, self) {
+            if let Ok(ref mut req) = Request::new(&stream, rc_server.clone()) {
                 // Handle the request based on its path.
                 if req.path() == "/" {
-                    let server_clone = self.to_owned();
-                    server_clone.render_index_route(req, stream, target);
+                    rc_server.render_index_route(req, stream, target);
                 } else {
                     info!(target: target, "Handling route: {}", req.path());
                 }

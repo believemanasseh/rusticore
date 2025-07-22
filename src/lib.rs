@@ -5,6 +5,7 @@ mod response;
 mod routing;
 mod server;
 
+pub use buffer_pool::BufferPool;
 pub use logging::init_logging;
 pub use routing::Route;
 pub use server::Server;
