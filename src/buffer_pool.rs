@@ -12,7 +12,7 @@ pub struct BufferPool<'a> {
     current_size: u8,
     /// A thread-safe queue of buffers.
     buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
-    /// A reference to the server instance that owns this buffer pool.
+    /// A thread-safe reference to the server instance that owns this buffer pool.
     server: Arc<&'a mut Server>,
 }
 
@@ -22,16 +22,19 @@ impl<'a> BufferPool<'a> {
     /// # Arguments
     ///
     /// * `max_size` - The maximum number of buffers in the pool.
+    /// * `server` - A thread-safe mutable reference to the server instance that owns this buffer pool.
     ///
     /// # Returns
     ///
     /// A new `BufferPool` instance initialised with empty buffers.
     pub fn new(max_size: u8, server: Arc<&'a mut Server>) -> Self {
         let mut buffers = VecDeque::new();
+
         for _i in 0..max_size {
             let buffer = Vec::new();
             buffers.push_back(buffer);
         }
+
         BufferPool {
             max_size,
             current_size: max_size,
@@ -89,9 +92,9 @@ mod tests {
     /// This test checks if a buffer can be acquired from the pool, released back,
     /// and verifies that the pool's size is maintained correctly.
     fn test_buffer_pool() {
-        let mut s = Server::new("localhost", 8080, false, None);
-        let server = Arc::new(&mut s);
-        let mut pool = BufferPool::new(5, server.clone());
+        let mut server = Server::new("localhost", 8080, false, None);
+        let arc_server = Arc::new(&mut server);
+        let mut pool = BufferPool::new(5, arc_server.clone());
 
         // Acquire a buffer
         let buffer = pool.acquire();

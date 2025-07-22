@@ -29,7 +29,7 @@ pub struct Request<'a> {
     buffer_pool: Arc<Mutex<BufferPool<'a>>>,
     /// The cursor position in the buffer, used for parsing.
     cursor: usize,
-    /// The server instance that is handling the request.
+    /// A thread-safe server instance that is handling the request.
     server: Arc<&'a mut Server>,
 }
 
@@ -39,7 +39,6 @@ impl<'a> Drop for Request<'a> {
     /// # Note
     ///
     /// This method ensures that the buffer is returned to the pool for reuse, preventing memory leaks.
-    ///
     fn drop(&mut self) {
         let mut pool = self.buffer_pool.lock().unwrap();
         pool.release(std::mem::take(&mut self.buffer));
@@ -52,8 +51,8 @@ impl<'a> Request<'a> {
     ///
     /// # Arguments
     ///
-    /// * `stream` - A `TcpStream` reference representing the incoming connection.
-    /// * `server` - A mutable reference to the `Server` instance that will handle the request.
+    /// * `stream` - A `TcpStream` or `MockStream` mutable reference representing the incoming connection.
+    /// * `server` - A thread-safe mutable reference to the `Server` instance that will handle the request.
     ///
     /// # Returns
     ///
@@ -78,8 +77,8 @@ impl<'a> Request<'a> {
     ///
     /// # Arguments
     ///
-    /// * `stream` - A `TcpStream` reference representing the incoming connection.
-    /// * `server` - A mutable reference to the `Server` instance that will handle the request.
+    /// * `stream` - A `TcpStream` or `MockStream` mutable reference representing the incoming connection.
+    /// * `server` - A thread-safe mutable reference to the `Server` instance that will handle the request.
     ///
     /// # Returns
     ///
@@ -300,8 +299,8 @@ mod tests {
     /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
     /// with the method, path, HTTP version, and headers.
     fn test_request_parsing() {
-        let mut s = Server::new("localhost", 8080, false, None);
-        let server = Arc::new(&mut s);
+        let mut server = Server::new("localhost", 8080, false, None);
+        let arc_server = Arc::new(&mut server);
         let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
         let (listener, handle) = MockListener::new();
 
@@ -312,7 +311,7 @@ mod tests {
         });
 
         while let Ok(mut stream) = listener.accept() {
-            match Request::parse(&mut stream, server.clone()) {
+            match Request::parse(&mut stream, arc_server.clone()) {
                 Ok(request) => {
                     assert_eq!(request.method(), Method::GET);
                     assert_eq!(request.path(), "/");
