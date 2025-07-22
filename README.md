@@ -71,7 +71,11 @@ fn main() {
 To run tests, use:
 
 ```sh
-cargo test
+# Unit tests
+cargo test --lib
+
+# Integration tests
+cargo test --test test_*
 ```
 
 ## License
