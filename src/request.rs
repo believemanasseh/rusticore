@@ -284,7 +284,7 @@ mod tests {
     use std::thread;
 
     #[test]
-    /// Tests the parsing of an HTTP request from a `MockStream` (`std::net::TcpStream` equivalent).
+    /// Tests the parsing of an HTTP request from a `MockStream` (`std::net::TcpStream` look-alike).
     /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
     /// with the method, path, HTTP version, and headers.
     fn test_request_parsing() {
