@@ -66,9 +66,19 @@ impl<'a> Request<'a> {
         stream: &mut T,
         server: Arc<&'a mut Server>,
     ) -> Result<Self, &'static str> {
-        let res = Request::parse(stream, server);
+        let mut request = Request {
+            method: None,
+            path: None,
+            http_version: None,
+            headers: Some(Vec::new()),
+            buffer: Vec::new(),
+            buffer_pool: Arc::new(Mutex::new(BufferPool::new(10, server.clone()))),
+            cursor: 0,
+            server: server.clone(),
+        };
+        let res = request.parse(stream);
         match res {
-            Ok(req) => Ok(req),
+            Ok(_) => Ok(request),
             Err(e) => Err(e),
         }
     }
@@ -78,42 +88,27 @@ impl<'a> Request<'a> {
     /// # Arguments
     ///
     /// * `stream` - A `TcpStream` or `MockStream` mutable reference representing the incoming connection.
-    /// * `server` - A thread-safe mutable reference to the `Server` instance that will handle the request.
     ///
     /// # Returns
     ///
-    /// A `Result` containing a `Request` instance if successful, or an error message if parsing fails.
+    /// A `Result` indicating success or failure of the parsing operation.
     ///
     /// # Errors
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    fn parse<T: Read + Write>(
-        stream: &mut T,
-        server: Arc<&'a mut Server>,
-    ) -> Result<Request<'a>, &'static str> {
-        let mut request = Request {
-            method: None,
-            path: None,
-            http_version: None,
-            headers: Some(Vec::new()),
-            buffer: Vec::new(),
-            buffer_pool: Arc::new(Mutex::new(BufferPool::new(10, server.clone()))),
-            cursor: 0,
-            server,
-        };
-
+    fn parse<T: Read + Write>(&mut self, stream: &mut T) -> Result<(), &'static str> {
         let mut buf_reader = BufReader::new(stream);
         let mut headers_len = 0;
 
-        if let Some(buffer) = request.buffer_pool.lock().unwrap().acquire() {
-            request.buffer = buffer;
+        if let Some(buffer) = self.buffer_pool.lock().unwrap().acquire() {
+            self.buffer = buffer;
         } else {
             return Err("Failed to acquire buffer from pool");
         }
 
         loop {
-            let bytes = match buf_reader.read_until(b'\n', request.buffer.as_mut()) {
+            let bytes = match buf_reader.read_until(b'\n', self.buffer.as_mut()) {
                 Ok(0) => Err("Connection closed by peer"),
                 Ok(n) => Ok(n),
                 Err(_) => Err("Error reading from stream"),
@@ -126,7 +121,7 @@ impl<'a> Request<'a> {
             }
 
             // Checks for the end of the headers section
-            if request.buffer.ends_with(b"\r\n\r\n") {
+            if self.buffer.ends_with(b"\r\n\r\n") {
                 break;
             }
 
@@ -136,76 +131,70 @@ impl<'a> Request<'a> {
         }
 
         // Parse request line (e.g., "GET /path HTTP/1.1")
-        if let Some(line_end) = request.buffer[request.cursor..]
-            .iter()
-            .position(|&b| b == b'\n')
-        {
-            let line = &request.buffer[request.cursor..request.cursor + line_end];
+        if let Some(line_end) = self.buffer[self.cursor..].iter().position(|&b| b == b'\n') {
+            let line = &self.buffer[self.cursor..self.cursor + line_end];
             let mut parts = line.split(|&b| b == b' ');
 
             if let Some(method_bytes) = parts.next() {
-                request.method = Some(Span {
-                    start: request.cursor,
+                self.method = Some(Span {
+                    start: self.cursor,
                     length: method_bytes.len(),
                 });
             }
-            let method_len = request.method.as_ref().map_or(0, |s| s.length);
+            let method_len = self.method.as_ref().map_or(0, |s| s.length);
 
             if let Some(path_bytes) = parts.next() {
-                request.path = Some(Span {
-                    start: request.cursor + method_len + 1,
+                self.path = Some(Span {
+                    start: self.cursor + method_len + 1,
                     length: path_bytes.len(),
                 });
             }
 
             if let Some(version_bytes) = parts.next() {
-                request.http_version = Some(Span {
-                    start: request.cursor
+                self.http_version = Some(Span {
+                    start: self.cursor
                         + method_len
                         + 2
-                        + request.path.as_ref().map_or(0, |s| s.length),
+                        + self.path.as_ref().map_or(0, |s| s.length),
                     length: version_bytes.len() - 1,
                 });
             }
 
-            request.cursor += line_end + 1; // Move cursor to headers start
+            self.cursor += line_end + 1; // Move cursor to headers start
         } else {
             return Err("Invalid request line");
         }
 
         // Parse headers
         loop {
-            if let Some(line_end) = request.buffer[request.cursor..]
-                .iter()
-                .position(|&b| b == b'\n')
-            {
-                let line = &request.buffer[request.cursor..request.cursor + line_end];
+            if let Some(line_end) = self.buffer[self.cursor..].iter().position(|&b| b == b'\n') {
+                let line = &self.buffer[self.cursor..self.cursor + line_end];
 
                 if line.is_empty() || line == b"\r" {
-                    request.cursor += line_end + 3; // Move cursor to the request body
+                    self.cursor += line_end + 3; // Move cursor to the request body
                     break; // End of headers
                 }
 
                 if let Some(colon_pos) = line.iter().position(|&b| b == b':') {
                     let key = Span {
-                        start: request.cursor,
+                        start: self.cursor,
                         length: colon_pos,
                     };
-                    let value_start = request.cursor + colon_pos + 2; // Skip ": "
+                    let value_start = self.cursor + colon_pos + 2; // Skip ": "
                     let value_end = line.iter().position(|&b| b == b'\r').unwrap_or(line.len());
                     let value = Span {
                         start: value_start,
                         length: value_end - colon_pos - 2,
                     };
 
-                    request.headers.as_mut().unwrap().push((key, value));
+                    self.headers.as_mut().unwrap().push((key, value));
                 }
 
-                request.cursor += line_end + 1; // Move cursor to the next line
+                self.cursor += line_end + 1; // Move cursor to the next line
             }
         }
 
-        Ok(request)
+        Ok(())
     }
 
     /// Returns the HTTP path of the request.
@@ -311,7 +300,7 @@ mod tests {
         });
 
         while let Ok(mut stream) = listener.accept() {
-            match Request::parse(&mut stream, arc_server.clone()) {
+            match Request::new(&mut stream, arc_server.clone()) {
                 Ok(request) => {
                     assert_eq!(request.method(), Method::GET);
                     assert_eq!(request.path(), "/");
