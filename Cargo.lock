@@ -265,6 +265,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
+name = "mock-io"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2003126c93cf6d2031e425bbdadd5f2123f811b2aa3ff17d9f033b6ce8d4dcfe"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -384,6 +393,7 @@ dependencies = [
  "http",
  "log",
  "log4rs",
+ "mock-io",
 ]
 
 [[package]]

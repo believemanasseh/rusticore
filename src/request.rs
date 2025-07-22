@@ -1,7 +1,7 @@
 use crate::{BufferPool, Server};
 use http::method::Method;
 use std::io::{BufRead, BufReader};
-use std::net::TcpStream;
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -63,7 +63,10 @@ impl<'a> Request<'a> {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    pub fn new(stream: &TcpStream, server: Arc<&'a mut Server>) -> Result<Self, &'static str> {
+    pub fn new<T: Read + Write>(
+        stream: &mut T,
+        server: Arc<&'a mut Server>,
+    ) -> Result<Self, &'static str> {
         let res = Request::parse(stream, server);
         match res {
             Ok(req) => Ok(req),
@@ -86,7 +89,10 @@ impl<'a> Request<'a> {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    fn parse(stream: &TcpStream, server: Arc<&'a mut Server>) -> Result<Request<'a>, &'static str> {
+    fn parse<T: Read + Write>(
+        stream: &mut T,
+        server: Arc<&'a mut Server>,
+    ) -> Result<Request<'a>, &'static str> {
         let mut request = Request {
             method: None,
             path: None,
@@ -144,12 +150,22 @@ impl<'a> Request<'a> {
                     length: method_bytes.len(),
                 });
             }
-            let method_len = request.method.as_mut().map_or(0, |s| s.length);
+            let method_len = request.method.as_ref().map_or(0, |s| s.length);
 
             if let Some(path_bytes) = parts.next() {
                 request.path = Some(Span {
                     start: request.cursor + method_len + 1,
                     length: path_bytes.len(),
+                });
+            }
+
+            if let Some(version_bytes) = parts.next() {
+                request.http_version = Some(Span {
+                    start: request.cursor
+                        + method_len
+                        + 2
+                        + request.path.as_ref().map_or(0, |s| s.length),
+                    length: version_bytes.len() - 1,
                 });
             }
 
@@ -176,11 +192,11 @@ impl<'a> Request<'a> {
                         start: request.cursor,
                         length: colon_pos,
                     };
-                    let value_start = request.cursor + colon_pos + 1;
+                    let value_start = request.cursor + colon_pos + 2; // Skip ": "
                     let value_end = line.iter().position(|&b| b == b'\r').unwrap_or(line.len());
                     let value = Span {
                         start: value_start,
-                        length: value_end - colon_pos - 1,
+                        length: value_end - colon_pos - 2,
                     };
 
                     request.headers.as_mut().unwrap().push((key, value));
@@ -270,5 +286,41 @@ impl<'a> Request<'a> {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mock_io::sync::{MockListener, MockStream};
+    use std::thread;
+
+    #[test]
+    /// Tests the parsing of an HTTP request from a `MockStream` (`std::net::TcpStream` equivalent).
+    /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
+    /// with the method, path, HTTP version, and headers.
+    fn test_request_parsing() {
+        let mut s = Server::new("localhost", 8080, false, None);
+        let server = Arc::new(&mut s);
+        let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        let (listener, handle) = MockListener::new();
+
+        // Spawn a thread to simulate a client sending a request
+        thread::spawn(move || {
+            let mut stream = MockStream::connect(&handle).unwrap();
+            stream.write(request_data).unwrap();
+        });
+
+        while let Ok(mut stream) = listener.accept() {
+            match Request::parse(&mut stream, server.clone()) {
+                Ok(request) => {
+                    assert_eq!(request.method(), Method::GET);
+                    assert_eq!(request.path(), "/");
+                    assert_eq!(request.http_version(), "HTTP/1.1");
+                    assert_eq!(request.get_header("Host"), Some("localhost"));
+                }
+                Err(e) => assert!(false, "Failed to parse request: {e}"),
+            }
+        }
     }
 }

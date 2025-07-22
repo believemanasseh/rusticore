@@ -112,11 +112,11 @@ impl Server {
         let rc_server = Arc::new(self);
 
         for stream in listener.incoming() {
-            let stream = stream.unwrap();
+            let mut stream = stream.unwrap();
             info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
 
             // Create a new request instance for the incoming connection.
-            if let Ok(ref mut req) = Request::new(&stream, rc_server.clone()) {
+            if let Ok(ref mut req) = Request::new(&mut stream, rc_server.clone()) {
                 // Handle the request based on its path.
                 if req.path() == "/" {
                     rc_server.render_index_route(req, stream, target);
