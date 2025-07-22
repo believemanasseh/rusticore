@@ -1,8 +1,8 @@
-use crate::Server;
+use crate::{BufferPool, Server};
 use http::method::Method;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 /// Represents a span of text in the HTTP request, defined by its start position and length.
@@ -14,7 +14,7 @@ struct Span {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 /// Represents an HTTP request parsed from a `TcpStream`.
-pub struct Request {
+pub struct Request<'a> {
     /// The HTTP method (e.g., GET, POST) of the request.
     method: Option<Span>,
     /// The route or path requested (e.g., /index).
@@ -25,13 +25,28 @@ pub struct Request {
     headers: Option<Vec<(Span, Span)>>,
     /// The buffer containing the raw HTTP request data.
     buffer: Vec<u8>,
+    /// A thread-safe buffer pool used to manage memory for request buffers.
+    buffer_pool: Arc<Mutex<BufferPool<'a>>>,
     /// The cursor position in the buffer, used for parsing.
     cursor: usize,
     /// The server instance that is handling the request.
-    server: Arc<Server>,
+    server: Arc<&'a mut Server>,
 }
 
-impl Request {
+impl<'a> Drop for Request<'a> {
+    /// Releases the buffer back to the buffer pool when the `Request` instance is dropped.
+    ///
+    /// # Note
+    ///
+    /// This method ensures that the buffer is returned to the pool for reuse, preventing memory leaks.
+    ///
+    fn drop(&mut self) {
+        let mut pool = self.buffer_pool.lock().unwrap();
+        pool.release(std::mem::take(&mut self.buffer));
+    }
+}
+
+impl<'a> Request<'a> {
     /// Creates a new `Request` instance by reading the HTTP request from the
     /// provided `TcpStream`.
     ///
@@ -48,7 +63,7 @@ impl Request {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    pub fn new(stream: &TcpStream, server: &mut Server) -> Result<Self, &'static str> {
+    pub fn new(stream: &TcpStream, server: Arc<&'a mut Server>) -> Result<Self, &'static str> {
         let res = Request::parse(stream, server);
         match res {
             Ok(req) => Ok(req),
@@ -71,19 +86,27 @@ impl Request {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    fn parse(stream: &TcpStream, server: &mut Server) -> Result<Request, &'static str> {
+    fn parse(stream: &TcpStream, server: Arc<&'a mut Server>) -> Result<Request<'a>, &'static str> {
         let mut request = Request {
             method: None,
             path: None,
             http_version: None,
             headers: Some(Vec::new()),
             buffer: Vec::new(),
+            buffer_pool: Arc::new(Mutex::new(BufferPool::new(10, server.clone()))),
             cursor: 0,
-            server: Arc::from(server.to_owned()),
+            server,
         };
 
         let mut buf_reader = BufReader::new(stream);
         let mut headers_len = 0;
+
+        if let Some(buffer) = request.buffer_pool.lock().unwrap().acquire() {
+            request.buffer = buffer;
+        } else {
+            return Err("Failed to acquire buffer from pool");
+        }
+
         loop {
             let bytes = match buf_reader.read_until(b'\n', request.buffer.as_mut()) {
                 Ok(0) => Err("Connection closed by peer"),
