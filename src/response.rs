@@ -2,7 +2,7 @@ use crate::Server;
 use http::StatusCode;
 use std::io::Write;
 use std::net::TcpStream;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 /// Represents an HTTP response that can be sent back to a client.
@@ -14,7 +14,7 @@ pub struct Response<'a> {
     /// The headers of the response.
     pub headers: Vec<(&'static str, &'static str)>,
     /// An optional TCP stream to which the response will be sent.
-    pub tcp_stream: Option<TcpStream>,
+    pub tcp_stream: Arc<Mutex<TcpStream>>,
     /// A thread-safe server instance that is handling the response.
     pub server: Arc<&'a mut Server>,
 }
@@ -24,64 +24,72 @@ impl<'a> Clone for Response<'a> {
     ///
     /// # Returns
     ///
-    /// A new `Response` instance with the same status code, HTTP version, headers, body, and TCP stream.
+    /// A new `Response` instance with the same status code, HTTP version, headers, TCP stream and server.
     fn clone(&self) -> Self {
         Response {
             status_code: self.status_code,
             http_version: self.http_version,
             headers: self.headers.clone(),
-            tcp_stream: self.tcp_stream.as_ref().and_then(|s| s.try_clone().ok()),
+            tcp_stream: self.tcp_stream.clone(),
             server: Arc::clone(&self.server),
         }
     }
 }
 
 impl<'a> Response<'a> {
-    /// Constructs the HTTP response string from the provided `Response` object.
+    /// Constructs the HTTP response byte from the provided `Response` object.
     ///
     /// # Arguments
     ///
-    /// * `response` - A reference to a `Response` object containing the HTTP response data.
+    /// * `response` - A reference to the `Response` object containing the HTTP response data.
+    /// * `body` - A string slice representing the body of the response.
     ///
     /// # Returns
     ///
-    /// A `String` representing the complete HTTP response formatted as a string.
-    pub fn construct_response_str(&self, response: &Response, body: &str) -> String {
-        let mut response_str = String::new();
+    /// A vector of bytes representing the complete HTTP response, including the status line, headers, and body.
+    pub fn construct_response_bytes(&self, response: &Response, body: &str) -> Vec<u8> {
+        let mut response_bytes = Vec::new();
 
-        // Add the HTTP version and status code to the response string
-        response_str.push_str(format!("{} ", &response.http_version).as_str());
-        response_str.push_str(format!("{} ", response.status_code.as_u16()).as_str());
-        response_str.push_str(
-            format!(
-                "{}\r\n",
-                response.status_code.canonical_reason().unwrap_or_default()
-            )
-            .as_str(),
+        // Write request line
+        response_bytes.extend_from_slice(response.http_version.as_bytes());
+        response_bytes.extend_from_slice(b" ");
+        response_bytes.extend_from_slice(response.status_code.as_str().as_bytes());
+        response_bytes.extend_from_slice(b" ");
+        response_bytes.extend_from_slice(
+            response
+                .status_code
+                .canonical_reason()
+                .unwrap_or_default()
+                .as_bytes(),
         );
+        response_bytes.extend_from_slice(b"\r\n");
 
-        // Add headers to the response string
+        // Write headers
         for (key, value) in response.headers.iter() {
-            response_str.push_str(format!("{}: {}\r\n", key, value).as_str());
+            response_bytes.extend_from_slice(key.as_bytes());
+            response_bytes.extend_from_slice(b": ");
+            response_bytes.extend_from_slice(value.as_bytes());
+            response_bytes.extend_from_slice(b"\r\n");
         }
 
-        // Add body to the response string
-        response_str.push_str(format!("\r\n{}", body).as_str());
+        // End headers and add body
+        response_bytes.extend_from_slice(b"\r\n");
+        response_bytes.extend_from_slice(body.as_bytes());
 
-        response_str
+        response_bytes
     }
 
-    /// Constructs a new response string from a `Response` instance.
+    /// Constructs a new response string from the `Response` instance.
     ///
     /// # Arguments
     ///
-    /// * `body` - The body of the response as a `String`.
+    /// * `body` - A string slice representing the body of the response.
     pub fn send(&mut self, body: &str) {
-        let response_str = self.construct_response_str(self, body);
-        if let Some(ref mut tcp_stream) = self.tcp_stream {
-            tcp_stream.write_all(response_str.as_bytes()).unwrap()
-        } else {
-            panic!("TCP stream is not set. Cannot send response.");
-        }
+        let response_bytes = self.construct_response_bytes(self, body);
+        self.tcp_stream
+            .lock()
+            .unwrap()
+            .write_all(&response_bytes)
+            .expect("Failed to write response to TCP stream");
     }
 }
