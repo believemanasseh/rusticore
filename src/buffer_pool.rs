@@ -12,7 +12,7 @@ pub struct BufferPool<'a> {
     current_size: u8,
     /// A thread-safe queue of buffers.
     buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
-    /// The server instance that owns this buffer pool.
+    /// A reference to the server instance that owns this buffer pool.
     server: Arc<&'a mut Server>,
 }
 
@@ -71,9 +71,45 @@ impl<'a> BufferPool<'a> {
             "app::none"
         };
         if self.current_size < self.max_size {
+            self.current_size += 1;
             self.buffers.lock().unwrap().push_back(buffer);
         } else {
             warn!(target: target, "Buffer pool is full, discarding buffer!");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::Server;
+
+    #[test]
+    /// Tests the functionality of the `BufferPool`.
+    /// This test checks if a buffer can be acquired from the pool, released back,
+    /// and verifies that the pool's size is maintained correctly.
+    fn test_buffer_pool() {
+        let mut s = Server::new("localhost", 8080, false, None);
+        let server = Arc::new(&mut s);
+        let mut pool = BufferPool::new(5, server.clone());
+
+        // Acquire a buffer
+        let buffer = pool.acquire();
+        assert!(buffer.is_some(), "Buffer should be acquired successfully");
+        assert!(
+            pool.current_size < pool.max_size,
+            "Current size should be less than max size"
+        );
+
+        // Release the buffer
+        if let Some(buf) = buffer {
+            pool.release(buf);
+        }
+
+        // Check if the pool size is valid after release
+        assert_eq!(
+            pool.current_size, pool.max_size,
+            "Current size should equal max size after release"
+        );
     }
 }
