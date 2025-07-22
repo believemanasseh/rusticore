@@ -119,7 +119,7 @@ impl Server {
             if let Ok(ref mut req) = Request::new(&mut stream, arc_server.clone()) {
                 // Handle the request based on its path.
                 if req.path() == "/" {
-                    arc_server.render_index_route(req, stream, target);
+                    arc_server.render_index_route(req, stream, arc_server.clone(), target);
                 } else {
                     info!(target: target, "Handling route: {}", req.path());
                 }
@@ -190,15 +190,22 @@ impl Server {
     ///
     /// * `req` - A mutable reference to the `Request` object representing the incoming request.
     /// * `stream` - A `TcpStream` representing the connection to the client.
+    /// * `server` - A thread-safe mutable reference to the server instance.
     /// * `target` - A string slice representing the target for logging.
-    fn render_index_route(&self, req: &mut Request, stream: TcpStream, target: &str) {
+    fn render_index_route<'a>(
+        &self,
+        req: &mut Request,
+        stream: TcpStream,
+        server: Arc<&'a mut Server>,
+        target: &str,
+    ) {
         info!(target: target, "Rendering index route: {:#?}", self.routes[0]);
         let res = &mut Response {
             status_code: StatusCode::OK,
             http_version: "HTTP/1.1",
             headers: vec![("Content-Type", "text/plain")],
             tcp_stream: stream.try_clone().ok(),
-            server: Arc::from(self.to_owned()),
+            server,
         };
         self.routes[0].handle(req, res)
     }
