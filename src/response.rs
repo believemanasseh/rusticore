@@ -15,7 +15,7 @@ pub struct Response {
     pub headers: Vec<(&'static str, &'static str)>,
     /// An optional TCP stream to which the response will be sent.
     pub tcp_stream: Option<TcpStream>,
-    /// The server instance that is handling the response.
+    /// A thread-safe server instance that is handling the response.
     pub server: Arc<Server>,
 }
 
