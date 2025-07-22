@@ -1,17 +1,22 @@
+use crate::server::Server;
+use log::warn;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+#[derive(Debug)]
 /// A simple buffer pool implementation.
-struct BufferPool {
+pub struct BufferPool<'a> {
     /// The maximum size of the buffer pool.
-    pub max_size: u8,
+    max_size: u8,
     /// The current size of the buffer pool.
-    pub current_size: u8,
+    current_size: u8,
     /// A thread-safe queue of buffers.
-    pub buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    /// The server instance that owns this buffer pool.
+    server: Arc<&'a mut Server>,
 }
 
-impl BufferPool {
+impl<'a> BufferPool<'a> {
     /// Creates a new `BufferPool` instance with the specified maximum size.
     ///
     /// # Arguments
@@ -21,9 +26,9 @@ impl BufferPool {
     /// # Returns
     ///
     /// A new `BufferPool` instance initialised with empty buffers.
-    pub fn new(max_size: u8) -> Self {
+    pub fn new(max_size: u8, server: Arc<&'a mut Server>) -> Self {
         let mut buffers = VecDeque::new();
-        for i in 0..max_size {
+        for _i in 0..max_size {
             let buffer = Vec::new();
             buffers.push_back(buffer);
         }
@@ -31,6 +36,7 @@ impl BufferPool {
             max_size,
             current_size: max_size,
             buffers: Arc::new(Mutex::new(buffers)),
+            server,
         }
     }
 
@@ -44,7 +50,13 @@ impl BufferPool {
             return None;
         }
         self.current_size -= 1;
-        Some(self.buffers.lock().unwrap().pop_front().unwrap())
+        if let Some(mut buffer) = self.buffers.lock().unwrap().pop_front() {
+            buffer.clear();
+            Some(buffer)
+        } else {
+            // If the buffer queue is empty, return a new buffer
+            Some(Vec::new())
+        }
     }
 
     /// Releases a buffer back to the pool.
@@ -53,6 +65,15 @@ impl BufferPool {
     ///
     /// * `buffer` - The buffer to be released back to the pool.
     pub fn release(&mut self, buffer: Vec<u8>) {
-        todo!("Implement buffer release logic");
+        let target = if self.server.debug {
+            "app::core"
+        } else {
+            "app::none"
+        };
+        if self.current_size < self.max_size {
+            self.buffers.lock().unwrap().push_back(buffer);
+        } else {
+            warn!(target: target, "Buffer pool is full, discarding buffer!");
+        }
     }
 }
