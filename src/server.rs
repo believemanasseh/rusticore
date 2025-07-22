@@ -203,3 +203,44 @@ impl Server {
         self.routes[0].handle(req, res)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::Route;
+
+    #[test]
+    /// Tests the creation of a new server instance with default parameters.
+    /// It checks that the server's host, port, debug mode, log output, state, and routes are initialised correctly.
+    /// It also verifies that the initial index route is set.
+    fn new() {
+        let server = super::Server::new("localhost", 8080, false, None);
+        assert_eq!(server.host, "localhost");
+        assert_eq!(server.port, 8080);
+        assert!(!server.debug);
+        assert!(server.log_output.is_none());
+        assert_eq!(server.state, super::ServerState::Starting);
+        assert_eq!(server.routes.len(), 1);
+    }
+
+    #[test]
+    /// Tests the addition of single routes to the server.
+    /// It checks that a new route has been added to the server's routing vector,
+    fn add_route() {
+        let server = &mut super::Server::new("localhost", 8080, false, None);
+        server.add_route(Route::new("GET", "/test", super::index));
+        assert_eq!(server.routes.len(), 2);
+    }
+
+    #[test]
+    /// Tests the addition of multiple routes to the server.
+    /// It checks that the server's routing vector has been updated with the new routes,
+    fn add_routes() {
+        let server = &mut super::Server::new("localhost", 8080, false, None);
+        let routes = vec![
+            Route::new("GET", "/test1", super::index),
+            Route::new("POST", "/test2", super::index),
+        ];
+        server.add_routes(routes);
+        assert_eq!(server.routes.len(), 3);
+    }
+}
