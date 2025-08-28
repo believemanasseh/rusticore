@@ -4,7 +4,7 @@ use rusticore::ServerState;
 
 /// The main entry point of the server.
 fn main() {
-    let server = run_server("localhost", 9000, true, None);
+    let server = run_server("localhost", 9000, true, None, None);
 
     if let Ok(s) = server.as_ref() {
         if s.check_state(ServerState::Running).0 {

@@ -7,6 +7,8 @@ mod server;
 
 pub use buffer_pool::BufferPool;
 pub use logging::init_logging;
+pub use request::Request;
+pub use response::Response;
 pub use routing::Route;
 pub use server::Server;
 pub use server::ServerState;
@@ -19,6 +21,7 @@ pub use server::ServerState;
 /// * `port` - The port number on which the server will listen.
 /// * `debug` - A boolean indicating whether debug mode is enabled.
 /// * `log_output` - An optional string specifying the log output destination.
+/// * `default_index_handler` - An optional function to handle the index route. If not provided, a default handler will be used.
 ///
 /// # Returns
 ///
@@ -28,8 +31,9 @@ pub fn run_server(
     port: u16,
     debug: bool,
     log_output: Option<&'static str>,
+    default_index_handler: Option<fn(&mut request::Request, &mut response::Response)>,
 ) -> Result<Server, &'static str> {
-    let mut server = Server::new(host, port, debug, log_output);
+    let mut server = Server::new(host, port, debug, log_output, default_index_handler);
     match server.start() {
         Ok(_) => Ok(server),
         Err(e) => Err(e),

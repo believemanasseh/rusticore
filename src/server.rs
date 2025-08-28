@@ -50,6 +50,7 @@ impl Server {
     /// * `port` - The port number on which the server will listen.
     /// * `debug` - A boolean indicating whether debug mode is enabled.
     /// * `log_output` - An optional string specifying the log output destination.
+    /// * `default_index_handler` - An optional function to handle the index route. If not provided, a default handler will be used.
     ///
     /// # Returns
     ///
@@ -59,21 +60,29 @@ impl Server {
     ///
     /// ```
     /// use rusticore::Server;
-    /// let mut server = Server::new("localhost", 8080, false, None);
+    /// let mut server = Server::new("localhost", 8080, false, None, None);
     /// ```
     pub fn new(
         host: &'static str,
         port: u16,
         debug: bool,
         log_output: Option<&'static str>,
+        default_index_handler: Option<fn(&mut Request, &mut Response)>,
     ) -> Self {
+        // Use the provided index handler or default to the built-in index handler.
+        let index_handler: fn(&mut Request, &mut Response);
+        if let Some(handler) = default_index_handler {
+            index_handler = handler
+        } else {
+            index_handler = index
+        }
         Server {
             host,
             port,
             debug,
             log_output,
             state: ServerState::Starting,
-            routes: Vec::from([Route::new("GET", "/", index)]),
+            routes: Vec::from([Route::new("GET", "/", index_handler)]),
         }
     }
 
@@ -222,7 +231,7 @@ mod tests {
     /// It checks that the server's host, port, debug mode, log output, state, and routes are initialised correctly.
     /// It also verifies that the initial index route is set.
     fn new() {
-        let server = Server::new("localhost", 8080, false, None);
+        let server = Server::new("localhost", 8080, false, None, None);
         assert_eq!(server.host, "localhost");
         assert_eq!(server.port, 8080);
         assert!(!server.debug);
@@ -235,7 +244,7 @@ mod tests {
     /// Tests the addition of single routes to the server.
     /// It checks that a new route has been added to the server's routing vector,
     fn add_route() {
-        let server = &mut Server::new("localhost", 8080, false, None);
+        let server = &mut Server::new("localhost", 8080, false, None, None);
         server.add_route(Route::new("GET", "/test", index));
         assert_eq!(server.routes.len(), 2);
     }
@@ -244,7 +253,7 @@ mod tests {
     /// Tests the addition of multiple routes to the server.
     /// It checks that the server's routing vector has been updated with the new routes,
     fn add_routes() {
-        let server = &mut Server::new("localhost", 8080, false, None);
+        let server = &mut Server::new("localhost", 8080, false, None, None);
         let routes = vec![
             Route::new("GET", "/test1", index),
             Route::new("POST", "/test2", index),

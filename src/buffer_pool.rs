@@ -92,7 +92,7 @@ mod tests {
     /// This test checks if a buffer can be acquired from the pool, released back,
     /// and verifies that the pool's size is maintained correctly.
     fn test_buffer_pool() {
-        let mut server = Server::new("localhost", 8080, false, None);
+        let mut server = Server::new("localhost", 8080, false, None, None);
         let arc_server = Arc::new(&mut server);
         let mut pool = BufferPool::new(5, arc_server.clone());
 

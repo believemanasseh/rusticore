@@ -288,7 +288,7 @@ mod tests {
     /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
     /// with the method, path, HTTP version, and headers.
     fn test_request_parsing() {
-        let mut server = Server::new("localhost", 8080, false, None);
+        let mut server = Server::new("localhost", 8080, false, None, None);
         let arc_server = Arc::new(&mut server);
         let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
         let (listener, handle) = MockListener::new();
