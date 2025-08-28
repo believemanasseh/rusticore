@@ -85,11 +85,38 @@ impl<'a> Response<'a> {
     ///
     /// * `body` - A string slice representing the body of the response.
     pub fn send(&mut self, body: &str) {
+        self.set_content_type(body);
         let response_bytes = self.construct_response_bytes(self, body);
+        println!(
+            "Sending response: {}",
+            String::from_utf8_lossy(&response_bytes)
+        );
         self.tcp_stream
             .lock()
             .unwrap()
             .write_all(&response_bytes)
             .expect("Failed to write response to TCP stream");
+    }
+
+    /// Sets the `Content-Type` header based on the content of the response body.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the body of the response.
+    fn set_content_type(&mut self, body: &str) {
+        let content_type = if body.trim_start().starts_with("<!DOCTYPE html>")
+            || body.trim_start().starts_with("<html")
+        {
+            "text/html"
+        } else if body.trim_start().starts_with("{") || body.trim_start().starts_with("[") {
+            "application/json"
+        } else if body.contains('{') && body.contains('}') && body.contains(';') {
+            "text/css"
+        } else if body.trim_start().starts_with("<?xml") || body.trim_start().starts_with("<tag") {
+            "application/xml"
+        } else {
+            "text/plain"
+        };
+        self.headers[0] = ("Content-Type", content_type);
     }
 }
