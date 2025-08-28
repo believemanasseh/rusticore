@@ -117,6 +117,6 @@ impl<'a> Response<'a> {
         } else {
             "text/plain"
         };
-        self.headers[0] = ("Content-Type", content_type);
+        self.headers.push(("Content-Type", content_type));
     }
 }

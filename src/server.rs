@@ -213,7 +213,7 @@ impl Server {
         let res = &mut Response {
             status_code: StatusCode::OK,
             http_version: "HTTP/1.1",
-            headers: vec![("Content-Type", "text/plain")],
+            headers: vec![],
             tcp_stream: stream.clone(),
             server,
         };
