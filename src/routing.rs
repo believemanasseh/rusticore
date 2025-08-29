@@ -56,5 +56,5 @@ impl Route {
 /// * `req` - A mutable reference to the incoming HTTP request object.
 /// * `res` - A mutable reference to the HTTP response object to which the message will be sent.
 pub fn index(req: &mut Request, res: &mut Response) {
-    res.send("Welcome to the index page!")
+    res.text("Welcome to the index page!")
 }

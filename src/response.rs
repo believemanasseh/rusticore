@@ -85,12 +85,7 @@ impl<'a> Response<'a> {
     ///
     /// * `body` - A string slice representing the body of the response.
     pub fn send(&mut self, body: &str) {
-        self.set_content_type(body);
         let response_bytes = self.construct_response_bytes(self, body);
-        println!(
-            "Sending response: {}",
-            String::from_utf8_lossy(&response_bytes)
-        );
         self.tcp_stream
             .lock()
             .unwrap()
@@ -98,25 +93,68 @@ impl<'a> Response<'a> {
             .expect("Failed to write response to TCP stream");
     }
 
-    /// Sets the `Content-Type` header based on the content of the response body.
+    /// Sends an HTML response with the appropriate Content-Type header.
     ///
     /// # Arguments
     ///
-    /// * `body` - A string slice representing the body of the response.
-    fn set_content_type(&mut self, body: &str) {
-        let content_type = if body.trim_start().starts_with("<!DOCTYPE html>")
-            || body.trim_start().starts_with("<html")
-        {
-            "text/html"
-        } else if body.trim_start().starts_with("{") || body.trim_start().starts_with("[") {
-            "application/json"
-        } else if body.contains('{') && body.contains('}') && body.contains(';') {
-            "text/css"
-        } else if body.trim_start().starts_with("<?xml") || body.trim_start().starts_with("<tag") {
-            "application/xml"
-        } else {
-            "text/plain"
-        };
-        self.headers.push(("Content-Type", content_type));
+    /// * `body` - A string slice representing the HTML body of the response.
+    pub fn html(&mut self, body: &str) {
+        self.headers
+            .push(("Content-Type", "text/html; charset=utf-8"));
+        self.send(body);
+    }
+
+    /// Sends a JSON response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the JSON body of the response.
+    pub fn json(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "application/json"));
+        self.send(body);
+    }
+
+    /// Sends a plain text response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the plain text body of the response.
+    pub fn text(&mut self, body: &str) {
+        self.headers
+            .push(("Content-Type", "text/plain; charset=utf-8"));
+        self.send(body);
+    }
+
+    /// Sends a CSS response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the CSS body of the response.
+    pub fn css(&mut self, body: &str) {
+        self.headers
+            .push(("Content-Type", "text/css; charset=utf-8"));
+        self.send(body);
+    }
+
+    /// Sends a JavaScript response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the JavaScript body of the response.
+    pub fn javascript(&mut self, body: &str) {
+        self.headers
+            .push(("Content-Type", "application/javascript"));
+        self.send(body);
+    }
+
+    /// Sends an XML response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the XML body of the response.
+    pub fn xml(&mut self, body: &str) {
+        self.headers
+            .push(("Content-Type", "application/xml; charset=utf-8"));
+        self.send(body);
     }
 }
