@@ -157,4 +157,44 @@ impl<'a> Response<'a> {
             .push(("Content-Type", "application/xml; charset=utf-8"));
         self.send(body);
     }
+
+    /// Sends a PDF response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the PDF body of the response.
+    pub fn pdf(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "application/pdf"));
+        self.send(body);
+    }
+
+    /// Sends a ZIP response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the ZIP body of the response.
+    pub fn zip(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "application/zip"));
+        self.send(body);
+    }
+
+    /// Sends a PNG image response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the PNG image body of the response.
+    pub fn audio_mp3(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "audio/mpeg"));
+        self.send(body);
+    }
+
+    /// Sends a MP4 video response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the MP4 video body of the response.
+    pub fn video_mp4(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "video/mp4"));
+        self.send(body);
+    }
 }
