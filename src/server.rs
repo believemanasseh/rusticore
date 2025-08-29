@@ -127,11 +127,19 @@ impl Server {
             // Create a new request instance for the incoming connection.
             if let Ok(ref mut req) = Request::new(&mut stream, arc_server.clone()) {
                 // Handle the request based on its path.
-                if req.path() == "/" {
-                    let arc_stream = Arc::new(Mutex::new(stream));
-                    arc_server.render_index_route(req, arc_stream, arc_server.clone(), target);
-                } else {
-                    info!(target: target, "Handling route: {}", req.path());
+                for route in &arc_server.routes {
+                    if route.path == req.path() {
+                        info!(target: target, "Handling route: {}", req.path());
+                        let res = &mut Response {
+                            status_code: StatusCode::OK,
+                            http_version: "HTTP/1.1",
+                            headers: vec![],
+                            tcp_stream: Arc::new(Mutex::new(stream.try_clone().unwrap())),
+                            server: arc_server.clone(),
+                        };
+                        route.handle(req, res);
+                        break;
+                    }
                 }
             } else {
                 return Err("Failed to parse request");
@@ -192,32 +200,6 @@ impl Server {
     /// A string slice representing the target for logging.
     fn get_target(&self) -> &str {
         if self.debug { "app::core" } else { "app::none" }
-    }
-
-    /// Renders the index route by reusing the initially created `Route` instance and handling it.
-    ///
-    /// # Arguments
-    ///
-    /// * `req` - A mutable reference to the `Request` object representing the incoming request.
-    /// * `stream` - A thread-safe `TcpStream` representing the connection to the client.
-    /// * `server` - A thread-safe mutable reference to the server instance.
-    /// * `target` - A string slice representing the target for logging.
-    fn render_index_route<'a>(
-        &self,
-        req: &mut Request,
-        stream: Arc<Mutex<TcpStream>>,
-        server: Arc<&'a mut Server>,
-        target: &str,
-    ) {
-        info!(target: target, "Rendering index route: {:#?}", self.routes[0]);
-        let res = &mut Response {
-            status_code: StatusCode::OK,
-            http_version: "HTTP/1.1",
-            headers: vec![],
-            tcp_stream: stream.clone(),
-            server,
-        };
-        self.routes[0].handle(req, res)
     }
 }
 
