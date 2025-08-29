@@ -197,4 +197,34 @@ impl<'a> Response<'a> {
         self.headers.push(("Content-Type", "video/mp4"));
         self.send(body);
     }
+
+    /// Sends a PNG image response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the PNG image body of the response.
+    pub fn image_png(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "image/png"));
+        self.send(body);
+    }
+
+    /// Sends a JPEG image response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the JPEG image body of the response.
+    pub fn image_jpeg(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "image/jpeg"));
+        self.send(body);
+    }
+
+    /// Sends a GIF image response with the appropriate Content-Type header.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - A string slice representing the GIF image body of the response.
+    pub fn image_gif(&mut self, body: &str) {
+        self.headers.push(("Content-Type", "image/gif"));
+        self.send(body);
+    }
 }
