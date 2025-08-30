@@ -6,7 +6,7 @@ use crate::Route;
 use http::StatusCode;
 use log::info;
 use std::cmp::PartialEq;
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 #[allow(dead_code)]

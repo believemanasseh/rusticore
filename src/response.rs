@@ -98,7 +98,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the HTML body of the response.
-    pub fn html(&mut self, body: &str) {
+    pub fn html(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/html; charset=utf-8"));
         self.send(body);
@@ -109,7 +110,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the JSON body of the response.
-    pub fn json(&mut self, body: &str) {
+    pub fn json(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "application/json"));
         self.send(body);
     }
@@ -119,7 +121,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the plain text body of the response.
-    pub fn text(&mut self, body: &str) {
+    pub fn text(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/plain; charset=utf-8"));
         self.send(body);
@@ -130,7 +133,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the CSS body of the response.
-    pub fn css(&mut self, body: &str) {
+    pub fn css(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/css; charset=utf-8"));
         self.send(body);
@@ -141,7 +145,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the JavaScript body of the response.
-    pub fn javascript(&mut self, body: &str) {
+    pub fn javascript(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers
             .push(("Content-Type", "application/javascript"));
         self.send(body);
@@ -152,7 +157,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the XML body of the response.
-    pub fn xml(&mut self, body: &str) {
+    pub fn xml(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers
             .push(("Content-Type", "application/xml; charset=utf-8"));
         self.send(body);
@@ -163,7 +169,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the PDF body of the response.
-    pub fn pdf(&mut self, body: &str) {
+    pub fn pdf(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "application/pdf"));
         self.send(body);
     }
@@ -173,7 +180,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the ZIP body of the response.
-    pub fn zip(&mut self, body: &str) {
+    pub fn zip(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "application/zip"));
         self.send(body);
     }
@@ -183,7 +191,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the PNG image body of the response.
-    pub fn audio_mp3(&mut self, body: &str) {
+    pub fn audio_mp3(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "audio/mpeg"));
         self.send(body);
     }
@@ -193,7 +202,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the MP4 video body of the response.
-    pub fn video_mp4(&mut self, body: &str) {
+    pub fn video_mp4(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "video/mp4"));
         self.send(body);
     }
@@ -203,7 +213,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the PNG image body of the response.
-    pub fn image_png(&mut self, body: &str) {
+    pub fn image_png(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "image/png"));
         self.send(body);
     }
@@ -213,7 +224,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the JPEG image body of the response.
-    pub fn image_jpeg(&mut self, body: &str) {
+    pub fn image_jpeg(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "image/jpeg"));
         self.send(body);
     }
@@ -223,7 +235,8 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the GIF image body of the response.
-    pub fn image_gif(&mut self, body: &str) {
+    pub fn image_gif(&mut self, body: &str, status_code: StatusCode) {
+        self.status_code = status_code;
         self.headers.push(("Content-Type", "image/gif"));
         self.send(body);
     }
