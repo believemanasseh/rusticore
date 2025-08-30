@@ -55,11 +55,12 @@ Import and use in your Rust project:
 ```rust
 use rusticore::Server;
 use rusticore::Route;
+use http::StatusCode;
 
 fn main() {
     let mut server = Server::new("localhost", 9000, false, None);
     let route = Route::new("GET", "/hello", |req, res| {
-        res.text("Hello, world!");
+        res.text("Hello, world!", StatusCode::OK);
     });
     server.add_route(route);
     server.start();
