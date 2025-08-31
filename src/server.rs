@@ -6,6 +6,7 @@ use crate::Route;
 use http::StatusCode;
 use log::info;
 use std::cmp::PartialEq;
+use std::collections::HashMap;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
@@ -128,7 +129,13 @@ impl Server {
             if let Ok(ref mut req) = Request::new(&mut stream, arc_server.clone()) {
                 // Handle the request based on its path.
                 for route in &arc_server.routes {
-                    if route.path == req.path() {
+                    let (matched, query_params, path_params) =
+                        Server::match_route(route.path, req.path());
+
+                    if matched {
+                        req.query_params = query_params;
+                        req.path_params = path_params;
+
                         info!(target: target, "Handling route: {}", req.path());
                         let res = &mut Response {
                             status_code: StatusCode::OK,
@@ -201,6 +208,56 @@ impl Server {
     fn get_target(&self) -> &str {
         if self.debug { "app::core" } else { "app::none" }
     }
+
+    /// Matches a given route pattern against a path and extracts query and path parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `pattern` - The route pattern, e.g., "/users/{id}".
+    /// * `path` - The actual path to match, e.g., "/users/42".
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// * A boolean indicating whether the pattern matches the path.
+    /// * A `HashMap` of query parameters extracted from the path.
+    /// * A `HashMap` of path parameters extracted from the path.
+    fn match_route(
+        pattern: &str,
+        path: &str,
+    ) -> (bool, HashMap<String, String>, HashMap<String, String>) {
+        let mut query_params = HashMap::new();
+        let mut path_params = HashMap::new();
+        let parts: Vec<&str> = path.split('?').collect();
+
+        if parts.len() == 2 {
+            let query_string = parts[1];
+            for param in query_string.split('&') {
+                let kv: Vec<&str> = param.split('=').collect();
+                if kv.len() == 2 {
+                    query_params.insert(kv[0].to_string(), kv[1].to_string());
+                }
+            }
+        }
+
+        let route_parts: Vec<&str> = pattern.trim_end_matches('/').split('/').collect();
+        let path_parts: Vec<&str> = parts[0].trim_end_matches('/').split('/').collect();
+
+        if route_parts.len() != path_parts.len() {
+            return (false, query_params, path_params);
+        }
+
+        for (pat, val) in route_parts.iter().zip(path_parts.iter()) {
+            if pat.starts_with('{') && pat.ends_with('}') {
+                let key = &pat[1..pat.len() - 1];
+                path_params.insert(key.to_string(), val.to_string());
+            } else if pat != val {
+                return (false, query_params, path_params);
+            }
+        }
+
+        (true, query_params, path_params)
+    }
 }
 
 #[cfg(test)]
@@ -242,5 +299,18 @@ mod tests {
         ];
         server.add_routes(routes);
         assert_eq!(server.routes.len(), 3);
+    }
+
+    #[test]
+    /// Tests the route matching functionality of the server.
+    /// It checks that a given route pattern matches a path and correctly extracts query and path parameters.
+    fn match_route() {
+        let (matched, query_params, path_params) =
+            Server::match_route("/users/{id}", "/users/42?key=value");
+        assert!(matched);
+        assert!(path_params.contains_key("id"));
+        assert_eq!(path_params.get("id").unwrap(), "42");
+        assert!(query_params.contains_key("key"));
+        assert_eq!(query_params.get("key").unwrap(), "value");
     }
 }

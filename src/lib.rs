@@ -31,7 +31,7 @@ pub fn run_server(
     port: u16,
     debug: bool,
     log_output: Option<&'static str>,
-    default_index_handler: Option<fn(&mut request::Request, &mut response::Response)>,
+    default_index_handler: Option<fn(&mut Request, &mut Response)>,
 ) -> Result<Server, &'static str> {
     let mut server = Server::new(host, port, debug, log_output, default_index_handler);
     match server.start() {

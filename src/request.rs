@@ -1,5 +1,6 @@
 use crate::{BufferPool, Server};
 use http::method::Method;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -23,6 +24,10 @@ pub struct Request<'a> {
     http_version: Option<Span>,
     /// The span of the HTTP headers in the request.
     headers: Option<Vec<(Span, Span)>>,
+    /// A map of path parameters extracted from the request URL.
+    pub path_params: HashMap<String, String>,
+    /// A map of query parameters extracted from the request URL.
+    pub query_params: HashMap<String, String>,
     /// The buffer containing the raw HTTP request data.
     buffer: Vec<u8>,
     /// A thread-safe buffer pool used to manage memory for request buffers.
@@ -71,13 +76,15 @@ impl<'a> Request<'a> {
             path: None,
             http_version: None,
             headers: Some(Vec::new()),
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
             buffer: Vec::new(),
             buffer_pool: Arc::new(Mutex::new(BufferPool::new(10, server.clone()))),
             cursor: 0,
             server: server.clone(),
         };
-        let res = request.parse(stream);
-        match res {
+        let parsed_req = request.parse(stream);
+        match parsed_req {
             Ok(_) => Ok(request),
             Err(e) => Err(e),
         }
