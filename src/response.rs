@@ -84,7 +84,7 @@ impl<'a> Response<'a> {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the body of the response.
-    pub fn send(&mut self, body: &str) {
+    fn send(&mut self, body: &str) {
         let response_bytes = self.construct_response_bytes(self, body);
         self.tcp_stream
             .lock()
