@@ -15,7 +15,7 @@ struct Span {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 /// Represents an HTTP request parsed from a `TcpStream`.
-pub struct Request<'a> {
+pub struct Request {
     /// The HTTP method (e.g., GET, POST) of the request.
     method: Option<Span>,
     /// The route or path requested (e.g., /index).
@@ -31,14 +31,14 @@ pub struct Request<'a> {
     /// The buffer containing the raw HTTP request data.
     buffer: Vec<u8>,
     /// A thread-safe buffer pool used to manage memory for request buffers.
-    buffer_pool: Arc<Mutex<BufferPool<'a>>>,
+    buffer_pool: Arc<Mutex<BufferPool>>,
     /// The cursor position in the buffer, used for parsing.
     cursor: usize,
     /// A thread-safe server instance that is handling the request.
-    server: Arc<&'a mut Server>,
+    server: Arc<Server>,
 }
 
-impl<'a> Drop for Request<'a> {
+impl Drop for Request {
     /// Releases the buffer back to the buffer pool when the `Request` instance is dropped.
     ///
     /// # Note
@@ -50,7 +50,7 @@ impl<'a> Drop for Request<'a> {
     }
 }
 
-impl<'a> Request<'a> {
+impl Request {
     /// Creates a new `Request` instance by reading the HTTP request from the
     /// provided `TcpStream`.
     ///
@@ -67,10 +67,7 @@ impl<'a> Request<'a> {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    pub fn new<T: Read + Write>(
-        stream: &mut T,
-        server: Arc<&'a mut Server>,
-    ) -> Result<Self, &'static str> {
+    pub fn new<T: Read + Write>(stream: &mut T, server: Arc<Server>) -> Result<Self, &'static str> {
         let mut request = Request {
             method: None,
             path: None,
@@ -295,8 +292,8 @@ mod tests {
     /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
     /// with the method, path, HTTP version, and headers.
     fn test_request_parsing() {
-        let mut server = Server::new("localhost", 8080, false, None, None);
-        let arc_server = Arc::new(&mut server);
+        let server = Server::new("localhost", 8080, false, None, None);
+        let arc_server = Arc::new(server);
         let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
         let (listener, handle) = MockListener::new();
 

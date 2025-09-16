@@ -93,7 +93,7 @@ impl Server {
     /// # Returns
     ///
     /// A `Result` indicating success or failure of the server start operation.
-    pub fn start<'a>(&'a mut self) -> Result<(), &'static str> {
+    pub fn start(&mut self) -> Result<(), &'static str> {
         if let Some(log) = self.log_output {
             init_logging(Some(log), self.debug);
         } else {
@@ -119,7 +119,7 @@ impl Server {
         info!(target: target, "Server state: {:?}", self.state);
 
         // Create a smart pointer to share the server instance across threads.
-        let arc_server = Arc::new(self);
+        let arc_server = Arc::new(self.clone());
 
         for stream in listener.incoming() {
             let mut stream = stream.unwrap();

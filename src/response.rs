@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 /// Represents an HTTP response that can be sent back to a client.
-pub struct Response<'a> {
+pub struct Response {
     /// The HTTP status code of the response.
     pub status_code: StatusCode,
     /// The HTTP version of the response.
@@ -16,10 +16,10 @@ pub struct Response<'a> {
     /// An optional TCP stream to which the response will be sent.
     pub tcp_stream: Arc<Mutex<TcpStream>>,
     /// A thread-safe server instance that is handling the response.
-    pub server: Arc<&'a mut Server>,
+    pub server: Arc<Server>,
 }
 
-impl<'a> Clone for Response<'a> {
+impl<'a> Clone for Response {
     /// Creates a clone of the `Response` object.
     ///
     /// # Returns
@@ -36,7 +36,7 @@ impl<'a> Clone for Response<'a> {
     }
 }
 
-impl<'a> Response<'a> {
+impl Response {
     /// Constructs the HTTP response byte from the provided `Response` object.
     ///
     /// # Arguments

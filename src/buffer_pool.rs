@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 /// A simple buffer pool implementation.
-pub struct BufferPool<'a> {
+pub struct BufferPool {
     /// The maximum size of the buffer pool.
     max_size: u8,
     /// The current size of the buffer pool.
@@ -13,10 +13,10 @@ pub struct BufferPool<'a> {
     /// A thread-safe queue of buffers.
     buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
     /// A thread-safe reference to the server instance that owns this buffer pool.
-    server: Arc<&'a mut Server>,
+    server: Arc<Server>,
 }
 
-impl<'a> BufferPool<'a> {
+impl BufferPool {
     /// Creates a new `BufferPool` instance with the specified maximum size.
     ///
     /// # Arguments
@@ -27,7 +27,7 @@ impl<'a> BufferPool<'a> {
     /// # Returns
     ///
     /// A new `BufferPool` instance initialised with empty buffers.
-    pub fn new(max_size: u8, server: Arc<&'a mut Server>) -> Self {
+    pub fn new(max_size: u8, server: Arc<Server>) -> Self {
         let mut buffers = VecDeque::new();
 
         for _i in 0..max_size {
@@ -92,8 +92,8 @@ mod tests {
     /// This test checks if a buffer can be acquired from the pool, released back,
     /// and verifies that the pool's size is maintained correctly.
     fn test_buffer_pool() {
-        let mut server = Server::new("localhost", 8080, false, None, None);
-        let arc_server = Arc::new(&mut server);
+        let server = Server::new("localhost", 8080, false, None, None);
+        let arc_server = Arc::new(server);
         let mut pool = BufferPool::new(5, arc_server.clone());
 
         // Acquire a buffer
