@@ -139,7 +139,7 @@ impl Server {
                         info!(target: target, "Handling route: {}", req.path());
                         let res = &mut Response {
                             status_code: StatusCode::OK,
-                            http_version: "HTTP/1.1",
+                            http_version: req.http_version().to_string(),
                             headers: vec![],
                             tcp_stream: Arc::new(Mutex::new(stream.try_clone().unwrap())),
                             server: arc_server.clone(),

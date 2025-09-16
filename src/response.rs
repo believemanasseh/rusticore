@@ -10,7 +10,7 @@ pub struct Response<'a> {
     /// The HTTP status code of the response.
     pub status_code: StatusCode,
     /// The HTTP version of the response.
-    pub http_version: &'static str,
+    pub http_version: String,
     /// The headers of the response.
     pub headers: Vec<(&'static str, &'static str)>,
     /// An optional TCP stream to which the response will be sent.
@@ -28,7 +28,7 @@ impl<'a> Clone for Response<'a> {
     fn clone(&self) -> Self {
         Response {
             status_code: self.status_code,
-            http_version: self.http_version,
+            http_version: self.http_version.clone(),
             headers: self.headers.clone(),
             tcp_stream: self.tcp_stream.clone(),
             server: Arc::clone(&self.server),
