@@ -5,9 +5,8 @@ A minimal, customisable and multithreaded web server written in Rust.
 ## Features
 
 - Simple API for starting and managing the server
-- Configurable logging with [log4rs](https://crates.io/crates/log4rs)
-- Supports both file and console logging
 - Easily extensible for custom logic and routing
+- Multithreaded for handling multiple requests concurrently
 
 ## Installation
 
