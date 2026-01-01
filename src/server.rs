@@ -1,14 +1,15 @@
 use crate::logging::init_logging;
 use crate::request::Request;
 use crate::response::Response;
-use crate::routing::index;
+use crate::routing::{index, Handler};
 use crate::Route;
 use http::StatusCode;
 use log::info;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
-use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::sync::{Mutex, RwLock};
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
@@ -18,7 +19,7 @@ pub enum ServerState {
     Starting,
     /// The server is currently running and accepting requests.
     Running,
-    /// The server is in the process of stopping.
+    /// The server is in th e process of stopping.
     Stopping,
     /// The server has been stopped and is not running.
     Stopped,
@@ -37,9 +38,9 @@ pub struct Server {
     /// An optional string specifying the log output destination.
     pub log_output: Option<&'static str>,
     /// The current state of the server.
-    pub state: ServerState,
+    pub state: Arc<Mutex<ServerState>>,
     /// A vector of routes that the server will handle.
-    pub routes: Vec<Route>,
+    pub routes: Arc<RwLock<Vec<Route>>>,
 }
 
 impl Server {
@@ -68,22 +69,27 @@ impl Server {
         port: u16,
         debug: bool,
         log_output: Option<&'static str>,
-        default_index_handler: Option<fn(&mut Request, &mut Response)>,
+        default_index_handler: Option<Handler>,
     ) -> Self {
         // Use the provided index handler or default to the built-in index handler.
-        let index_handler: fn(&mut Request, &mut Response);
+        let index_handler: Handler;
         if let Some(handler) = default_index_handler {
             index_handler = handler
         } else {
-            index_handler = index
+            index_handler = Arc::new(|req, res| Box::pin(index(req, res)));
         }
+
         Server {
             host,
             port,
             debug,
             log_output,
-            state: ServerState::Starting,
-            routes: Vec::from([Route::new("GET", "/", index_handler)]),
+            state: Arc::new(Mutex::new(ServerState::Starting)),
+            routes: Arc::new(RwLock::new(Vec::from([Route::new(
+                "GET",
+                "/",
+                index_handler,
+            )]))),
         }
     }
 
@@ -93,7 +99,7 @@ impl Server {
     /// # Returns
     ///
     /// A `Result` indicating success or failure of the server start operation.
-    pub fn start(&mut self) -> Result<(), &'static str> {
+    pub async fn start(&mut self) -> Result<(), &'static str> {
         if let Some(log) = self.log_output {
             init_logging(Some(log), self.debug);
         } else {
@@ -113,22 +119,33 @@ impl Server {
         }
 
         // Bind the server to the specified host and port.
-        let listener = TcpListener::bind(format!("{}:{}", self.host, self.port)).unwrap();
+        let listener = TcpListener::bind(format!("{}:{}", self.host, self.port))
+            .await
+            .unwrap();
 
-        self.state = ServerState::Running;
-        info!(target: target, "Server state: {:?}", self.state);
-
-        // Create a smart pointer to share the server instance across threads.
         let arc_server = Arc::new(self.clone());
 
-        for stream in listener.incoming() {
-            let mut stream = stream.unwrap();
-            info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
+        let mut state = arc_server.state.lock().await;
+        *state = ServerState::Running;
+        info!(target: target, "Server state: {:?}", *state);
 
-            // Create a new request instance for the incoming connection.
-            if let Ok(ref mut req) = Request::new(&mut stream, arc_server.clone()) {
+        loop {
+            let (mut stream, _) = listener.accept().await.unwrap();
+
+            info!(target: target, "New connection from {}", stream.peer_addr().unwrap());
+            let arc_server = arc_server.clone();
+
+            tokio::spawn(async move {
+                // Create a new request instance for the incoming connection.
+                let server = arc_server.clone();
+                let mut req = match Request::new(&mut stream, server).await {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
+
                 // Handle the request based on its path.
-                for route in &arc_server.routes {
+                let routes = arc_server.routes.read().await;
+                for route in routes.iter() {
                     let (matched, query_params, path_params) =
                         Server::match_route(route.path, req.path());
 
@@ -139,21 +156,17 @@ impl Server {
                         info!(target: target, "Handling route: {}", req.path());
                         let res = &mut Response {
                             status_code: StatusCode::OK,
-                            http_version: req.http_version().to_string(),
+                            http_version: Arc::new(req.http_version().to_string()),
                             headers: vec![],
-                            tcp_stream: Arc::new(Mutex::new(stream.try_clone().unwrap())),
+                            tcp_stream: Arc::new(Mutex::new(stream)),
                             server: arc_server.clone(),
                         };
-                        route.handle(req, res);
+                        route.handle(&mut req, res).await;
                         break;
                     }
                 }
-            } else {
-                return Err("Failed to parse request");
-            }
+            });
         }
-
-        Ok(())
     }
 
     /// Adds a new route to the server's routing vector.
@@ -165,13 +178,14 @@ impl Server {
     /// # Notes
     ///
     /// If the route already exists in the server's routing vector, it will not be added again.
-    pub fn add_route(&mut self, route: Route) {
+    pub async fn add_route(&mut self, route: Route) {
+        let mut routes = self.routes.write().await;
         let target = self.get_target();
-        if !self.routes.iter().any(|r| r.path == route.path) {
-            info!(target: target, "Added new route: {:#?}", route);
-            self.routes.push(route);
+        if !routes.iter().any(|r| r.path == route.path) {
+            info!(target: target, "Added new route: {}", route.path);
+            routes.push(route);
         } else {
-            info!(target: target, "Route already exists: {:#?}", route);
+            info!(target: target, "Route already exists: {}", route.path);
         }
     }
 
@@ -180,9 +194,9 @@ impl Server {
     /// # Arguments
     ///
     /// * `routes` - A vector of routes to be added, each represented as a `Route` struct.
-    pub fn add_routes(&mut self, routes: Vec<Route>) {
+    pub async fn add_routes(&mut self, routes: Vec<Route>) {
         for route in routes {
-            self.add_route(route);
+            self.add_route(route).await;
         }
     }
 
@@ -195,9 +209,10 @@ impl Server {
     /// # Returns
     ///
     /// A tuple containing a boolean indicating whether the server's state matches the provided state,
-    pub fn check_state(&self, state: ServerState) -> (bool, &ServerState) {
-        let states_match = self.state == state;
-        (states_match, &self.state)
+    pub async fn check_state(&self, state: ServerState) -> (bool, ServerState) {
+        let guard = self.state.lock().await;
+        let current = guard.clone();
+        (current == state, current)
     }
 
     /// Gets the target for logging based on the server's debug mode.
@@ -263,48 +278,66 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Route;
 
-    #[test]
+    #[tokio::test]
     /// Tests the creation of a new server instance with default parameters.
     /// It checks that the server's host, port, debug mode, log output, state, and routes are initialised correctly.
     /// It also verifies that the initial index route is set.
-    fn new() {
+    async fn new() {
         let server = Server::new("localhost", 8080, false, None, None);
         assert_eq!(server.host, "localhost");
         assert_eq!(server.port, 8080);
         assert!(!server.debug);
         assert!(server.log_output.is_none());
-        assert_eq!(server.state, ServerState::Starting);
-        assert_eq!(server.routes.len(), 1);
+        let (matches, current) = server.check_state(ServerState::Starting).await;
+        assert!(matches);
+        assert_eq!(current, ServerState::Starting);
+        let routes = server.routes.read().await;
+        assert_eq!(routes.len(), 1);
     }
 
-    #[test]
+    #[tokio::test]
     /// Tests the addition of single routes to the server.
     /// It checks that a new route has been added to the server's routing vector,
-    fn add_route() {
+    async fn add_route() {
         let server = &mut Server::new("localhost", 8080, false, None, None);
-        server.add_route(Route::new("GET", "/test", index));
-        assert_eq!(server.routes.len(), 2);
+        server
+            .add_route(Route::new(
+                "GET",
+                "/test",
+                Arc::new(|req, res| Box::pin(index(req, res))),
+            ))
+            .await;
+        let routes = server.routes.read().await;
+        assert_eq!(routes.len(), 2);
     }
 
-    #[test]
+    #[tokio::test]
     /// Tests the addition of multiple routes to the server.
     /// It checks that the server's routing vector has been updated with the new routes,
-    fn add_routes() {
+    async fn add_routes() {
         let server = &mut Server::new("localhost", 8080, false, None, None);
         let routes = vec![
-            Route::new("GET", "/test1", index),
-            Route::new("POST", "/test2", index),
+            Route::new(
+                "GET",
+                "/test1",
+                Arc::new(|req, res| Box::pin(index(req, res))),
+            ),
+            Route::new(
+                "PUT",
+                "/test3",
+                Arc::new(|req, res| Box::pin(index(req, res))),
+            ),
         ];
-        server.add_routes(routes);
-        assert_eq!(server.routes.len(), 3);
+        server.add_routes(routes).await;
+        let routes = server.routes.read().await;
+        assert_eq!(routes.len(), 3);
     }
 
-    #[test]
+    #[tokio::test]
     /// Tests the route matching functionality of the server.
     /// It checks that a given route pattern matches a path and correctly extracts query and path parameters.
-    fn match_route() {
+    async fn match_route() {
         let (matched, query_params, path_params) =
             Server::match_route("/users/{id}", "/users/42?key=value");
         assert!(matched);

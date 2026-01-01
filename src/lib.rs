@@ -5,6 +5,7 @@ mod response;
 mod routing;
 mod server;
 
+use crate::routing::Handler;
 pub use buffer_pool::BufferPool;
 pub use logging::init_logging;
 pub use request::Request;
@@ -26,15 +27,15 @@ pub use server::ServerState;
 /// # Returns
 ///
 /// A `Result` containing the `Server` instance if successful, or an error message if the server fails to start.
-pub fn run_server(
+pub async fn run_server(
     host: &'static str,
     port: u16,
     debug: bool,
     log_output: Option<&'static str>,
-    default_index_handler: Option<fn(&mut Request, &mut Response)>,
+    default_index_handler: Option<Handler>,
 ) -> Result<Server, &'static str> {
     let mut server = Server::new(host, port, debug, log_output, default_index_handler);
-    match server.start() {
+    match server.start().await {
         Ok(_) => Ok(server),
         Err(e) => Err(e),
     }

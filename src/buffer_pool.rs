@@ -1,7 +1,8 @@
 use crate::server::Server;
 use log::warn;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 /// A simple buffer pool implementation.
@@ -11,7 +12,7 @@ pub struct BufferPool {
     /// The current size of the buffer pool.
     current_size: u8,
     /// A thread-safe queue of buffers.
-    buffers: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    buffers: Mutex<VecDeque<Vec<u8>>>,
     /// A thread-safe reference to the server instance that owns this buffer pool.
     server: Arc<Server>,
 }
@@ -38,7 +39,7 @@ impl BufferPool {
         BufferPool {
             max_size,
             current_size: max_size,
-            buffers: Arc::new(Mutex::new(buffers)),
+            buffers: Mutex::new(buffers),
             server,
         }
     }
@@ -48,12 +49,12 @@ impl BufferPool {
     /// # Returns
     ///
     /// An `Option<Vec<u8>>` containing a buffer if available, or `None` if the pool is empty.
-    pub fn acquire(&mut self) -> Option<Vec<u8>> {
+    pub async fn acquire(&mut self) -> Option<Vec<u8>> {
         if self.current_size == 0 {
             return None;
         }
         self.current_size -= 1;
-        if let Some(mut buffer) = self.buffers.lock().unwrap().pop_front() {
+        if let Some(mut buffer) = self.buffers.lock().await.pop_front() {
             buffer.clear();
             Some(buffer)
         } else {
@@ -67,7 +68,7 @@ impl BufferPool {
     /// # Arguments
     ///
     /// * `buffer` - The buffer to be released back to the pool.
-    pub fn release(&mut self, buffer: Vec<u8>) {
+    pub async fn release(&mut self, buffer: Vec<u8>) {
         let target = if self.server.debug {
             "app::core"
         } else {
@@ -75,7 +76,7 @@ impl BufferPool {
         };
         if self.current_size < self.max_size {
             self.current_size += 1;
-            self.buffers.lock().unwrap().push_back(buffer);
+            self.buffers.lock().await.push_back(buffer);
         } else {
             warn!(target: target, "Buffer pool is full, discarding buffer!");
         }
@@ -83,21 +84,22 @@ impl BufferPool {
 }
 
 #[cfg(test)]
+
 mod tests {
     use super::*;
     use crate::server::Server;
 
-    #[test]
+    #[tokio::test]
     /// Tests the functionality of the `BufferPool`.
     /// This test checks if a buffer can be acquired from the pool, released back,
     /// and verifies that the pool's size is maintained correctly.
-    fn test_buffer_pool() {
+    async fn test_buffer_pool() {
         let server = Server::new("localhost", 8080, false, None, None);
         let arc_server = Arc::new(server);
         let mut pool = BufferPool::new(5, arc_server.clone());
 
         // Acquire a buffer
-        let buffer = pool.acquire();
+        let buffer = pool.acquire().await;
         assert!(buffer.is_some(), "Buffer should be acquired successfully");
         assert!(
             pool.current_size < pool.max_size,
@@ -105,9 +107,8 @@ mod tests {
         );
 
         // Release the buffer
-        if let Some(buf) = buffer {
-            pool.release(buf);
-        }
+        // let mut buff = buffer
+        pool.release(buffer.unwrap()).await;
 
         // Check if the pool size is valid after release
         assert_eq!(

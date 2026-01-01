@@ -1,8 +1,10 @@
 use crate::Server;
 use http::StatusCode;
-use std::io::Write;
-use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
+// use std::net::TcpStream;
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 /// Represents an HTTP response that can be sent back to a client.
@@ -10,7 +12,7 @@ pub struct Response {
     /// The HTTP status code of the response.
     pub status_code: StatusCode,
     /// The HTTP version of the response.
-    pub http_version: String,
+    pub http_version: Arc<String>,
     /// The headers of the response.
     pub headers: Vec<(&'static str, &'static str)>,
     /// An optional TCP stream to which the response will be sent.
@@ -19,7 +21,7 @@ pub struct Response {
     pub server: Arc<Server>,
 }
 
-impl<'a> Clone for Response {
+impl Clone for Response {
     /// Creates a clone of the `Response` object.
     ///
     /// # Returns
@@ -31,7 +33,7 @@ impl<'a> Clone for Response {
             http_version: self.http_version.clone(),
             headers: self.headers.clone(),
             tcp_stream: self.tcp_stream.clone(),
-            server: Arc::clone(&self.server),
+            server: self.server.clone(),
         }
     }
 }
@@ -84,12 +86,13 @@ impl Response {
     /// # Arguments
     ///
     /// * `body` - A string slice representing the body of the response.
-    fn send(&mut self, body: &str) {
+    async fn send(&mut self, body: &str) {
         let response_bytes = self.construct_response_bytes(self, body);
         self.tcp_stream
             .lock()
-            .unwrap()
+            .await
             .write_all(&response_bytes)
+            .await
             .expect("Failed to write response to TCP stream");
     }
 
@@ -99,11 +102,11 @@ impl Response {
     ///
     /// * `body` - A string slice representing the HTML body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn html(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn html(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/html; charset=utf-8"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a JSON response with the appropriate Content-Type header.
@@ -112,10 +115,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the JSON body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn json(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn json(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "application/json"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a plain text response with the appropriate Content-Type header.
@@ -124,11 +127,11 @@ impl Response {
     ///
     /// * `body` - A string slice representing the plain text body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn text(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn text(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/plain; charset=utf-8"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a CSS response with the appropriate Content-Type header.
@@ -137,11 +140,11 @@ impl Response {
     ///
     /// * `body` - A string slice representing the CSS body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn css(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn css(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers
             .push(("Content-Type", "text/css; charset=utf-8"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a JavaScript response with the appropriate Content-Type header.
@@ -150,11 +153,11 @@ impl Response {
     ///
     /// * `body` - A string slice representing the JavaScript body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn javascript(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn javascript(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers
             .push(("Content-Type", "application/javascript"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends an XML response with the appropriate Content-Type header.
@@ -163,11 +166,11 @@ impl Response {
     ///
     /// * `body` - A string slice representing the XML body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn xml(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn xml(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers
             .push(("Content-Type", "application/xml; charset=utf-8"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a PDF response with the appropriate Content-Type header.
@@ -176,10 +179,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the PDF body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn pdf(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn pdf(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "application/pdf"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a ZIP response with the appropriate Content-Type header.
@@ -188,10 +191,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the ZIP body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn zip(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn zip(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "application/zip"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a PNG image response with the appropriate Content-Type header.
@@ -200,10 +203,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the PNG image body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn audio_mp3(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn audio_mp3(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "audio/mpeg"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a MP4 video response with the appropriate Content-Type header.
@@ -212,10 +215,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the MP4 video body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn video_mp4(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn video_mp4(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "video/mp4"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a PNG image response with the appropriate Content-Type header.
@@ -224,10 +227,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the PNG image body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn image_png(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn image_png(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "image/png"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a JPEG image response with the appropriate Content-Type header.
@@ -236,10 +239,10 @@ impl Response {
     ///
     /// * `body` - A string slice representing the JPEG image body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn image_jpeg(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn image_jpeg(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "image/jpeg"));
-        self.send(body);
+        self.send(body).await;
     }
 
     /// Sends a GIF image response with the appropriate Content-Type header.
@@ -248,9 +251,9 @@ impl Response {
     ///
     /// * `body` - A string slice representing the GIF image body of the response.
     /// * `status_code` - The HTTP status code for the response.
-    pub fn image_gif(&mut self, body: &str, status_code: StatusCode) {
+    pub async fn image_gif(&mut self, body: &str, status_code: StatusCode) {
         self.status_code = status_code;
         self.headers.push(("Content-Type", "image/gif"));
-        self.send(body);
+        self.send(body).await;
     }
 }

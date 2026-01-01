@@ -1,9 +1,11 @@
 use crate::{BufferPool, Server};
 use http::method::Method;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+// use std::io::{BufRead, BufReader};
+// use std::io::{Read, Write};
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader};
+use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
 /// Represents a span of text in the HTTP request, defined by its start position and length.
@@ -13,7 +15,7 @@ struct Span {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// Represents an HTTP request parsed from a `TcpStream`.
 pub struct Request {
     /// The HTTP method (e.g., GET, POST) of the request.
@@ -45,8 +47,12 @@ impl Drop for Request {
     ///
     /// This method ensures that the buffer is returned to the pool for reuse, preventing memory leaks.
     fn drop(&mut self) {
-        let mut pool = self.buffer_pool.lock().unwrap();
-        pool.release(std::mem::take(&mut self.buffer));
+        let buffer = std::mem::take(&mut self.buffer);
+        let pool = self.buffer_pool.clone();
+        tokio::spawn(async move {
+            let mut pool = pool.lock().await;
+            pool.release(buffer).await;
+        });
     }
 }
 
@@ -67,7 +73,10 @@ impl Request {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    pub fn new<T: Read + Write>(stream: &mut T, server: Arc<Server>) -> Result<Self, &'static str> {
+    pub async fn new<T: AsyncRead + AsyncWrite + Unpin>(
+        stream: &mut T,
+        server: Arc<Server>,
+    ) -> Result<Self, &'static str> {
         let mut request = Request {
             method: None,
             path: None,
@@ -80,7 +89,7 @@ impl Request {
             cursor: 0,
             server: server.clone(),
         };
-        let parsed_req = request.parse(stream);
+        let parsed_req = request.parse(stream).await;
         match parsed_req {
             Ok(_) => Ok(request),
             Err(e) => Err(e),
@@ -101,18 +110,21 @@ impl Request {
     ///
     /// Returns an error message if the request cannot be parsed, such as if the connection is closed by the peer,
     /// if there is an error reading from the stream, or if the headers are too large.
-    fn parse<T: Read + Write>(&mut self, stream: &mut T) -> Result<(), &'static str> {
+    async fn parse<T: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        stream: &mut T,
+    ) -> Result<(), &'static str> {
         let mut buf_reader = BufReader::new(stream);
         let mut headers_len = 0;
 
-        if let Some(buffer) = self.buffer_pool.lock().unwrap().acquire() {
+        if let Some(buffer) = self.buffer_pool.lock().await.acquire().await {
             self.buffer = buffer;
         } else {
             return Err("Failed to acquire buffer from pool");
         }
 
         loop {
-            let bytes = match buf_reader.read_until(b'\n', self.buffer.as_mut()) {
+            let bytes = match buf_reader.read_until(b'\n', self.buffer.as_mut()).await {
                 Ok(0) => Err("Connection closed by peer"),
                 Ok(n) => Ok(n),
                 Err(_) => Err("Error reading from stream"),
@@ -284,35 +296,61 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mock_io::sync::{MockListener, MockStream};
-    use std::thread;
+    use http::method::Method;
+    use tokio::io::{duplex, AsyncWriteExt};
 
-    #[test]
+    #[tokio::test]
     /// Tests the parsing of an HTTP request from a `MockStream` (`std::net::TcpStream` look-alike).
     /// It simulates a client sending a request and checks if the `Request` struct is correctly populated
     /// with the method, path, HTTP version, and headers.
-    fn test_request_parsing() {
+    // fn test_request_parsing() {
+    //     let server = Server::new("localhost", 8080, false, None, None);
+    //     let arc_server = Arc::new(server);
+    //     let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    //     let (listener, handle) = MockListener::new();
+    //
+    //     // Spawn a thread to simulate a client sending a request
+    //     thread::spawn(move || {
+    //         let mut stream = MockStream::connect(&handle).unwrap();
+    //         stream.write(request_data).unwrap();
+    //     });
+    //
+    //     while let Ok(mut stream) = listener.accept() {
+    //         match Request::new(&mut stream, arc_server.clone()) {
+    //             Ok(request) => {
+    //                 assert_eq!(request.method(), Method::GET);
+    //                 assert_eq!(request.path(), "/");
+    //                 assert_eq!(request.http_version(), "HTTP/1.1");
+    //                 assert_eq!(request.get_header("Host"), Some("localhost"));
+    //             }
+    //             Err(e) => assert!(false, "Failed to parse request: {e}"),
+    //         }
+    //     }
+    // }
+    async fn test_request_parsing() {
         let server = Server::new("localhost", 8080, false, None, None);
         let arc_server = Arc::new(server);
+
+        // Create a duplex stream (in-memory async stream)
+        let (mut client, mut server_stream) = duplex(1024);
+
+        // Write request data from the "client" side
         let request_data = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        let (listener, handle) = MockListener::new();
+        let write_fut = async move {
+            client.write_all(request_data).await.unwrap();
+        };
 
-        // Spawn a thread to simulate a client sending a request
-        thread::spawn(move || {
-            let mut stream = MockStream::connect(&handle).unwrap();
-            stream.write(request_data).unwrap();
-        });
+        // Parse request from the "server" side
+        let parse_fut = async {
+            let req = Request::new(&mut server_stream, arc_server.clone())
+                .await
+                .unwrap();
+            assert_eq!(req.method(), Method::GET);
+            assert_eq!(req.path(), "/");
+            assert_eq!(req.http_version(), "HTTP/1.1");
+            assert_eq!(req.get_header("Host"), Some("localhost"));
+        };
 
-        while let Ok(mut stream) = listener.accept() {
-            match Request::new(&mut stream, arc_server.clone()) {
-                Ok(request) => {
-                    assert_eq!(request.method(), Method::GET);
-                    assert_eq!(request.path(), "/");
-                    assert_eq!(request.http_version(), "HTTP/1.1");
-                    assert_eq!(request.get_header("Host"), Some("localhost"));
-                }
-                Err(e) => assert!(false, "Failed to parse request: {e}"),
-            }
-        }
+        tokio::join!(write_fut, parse_fut);
     }
 }
