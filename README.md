@@ -57,13 +57,18 @@ use rusticore::Server;
 use rusticore::Route;
 use http::StatusCode;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut server = Server::new("localhost", 9000, false, None);
-    let route = Route::new("GET", "/hello", |req, res| {
-        res.text("Hello, world!", StatusCode::OK);
-    });
-    server.add_route(route);
-    server.start();
+    let route = Route::new(
+        "GET",
+        "/hello",
+        Arc::new(|req, res| Box::pin(async move {
+            res.text("Hello, world!", StatusCode::OK).await;
+        }))
+    );
+    server.add_route(route).await;
+    server.start().await.unwrap();
 }
 ```
 
